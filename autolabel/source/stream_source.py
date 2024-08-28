@@ -52,6 +52,8 @@ class ScreenshotSource(StreamSource):
         pass
 
     def slice(self):
+        """return video slice
+        """
         pass
 
     @property
@@ -69,6 +71,8 @@ class VideoSource(StreamSource):
         pass
 
     def slice(self):
+        """return video slice
+        """
         pass
 
     @property
@@ -76,6 +80,8 @@ class VideoSource(StreamSource):
         return self.interval
 
 class VideoStreamSource(StreamSource):
+    """webcam, stream and so on.
+    """
     def __iter__(self):
         pass
 
@@ -86,6 +92,8 @@ class VideoStreamSource(StreamSource):
         pass
 
     def slice(self):
+        """return video slice
+        """
         pass
 
     @property

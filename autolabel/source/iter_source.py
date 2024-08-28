@@ -26,8 +26,19 @@ class IterSource(metaclass=abc.ABCMeta):
         pass
 
 class DirSource(IterSource):
+    """
+    use SourceFactory.create iter create each object in
+    path (can be a path, a file)
+    """
     def __init__(self, source_input):
         self.source_input = source_input
+
+        self.srcs = []
+
+    def process(self):
+        for p in path:
+            source = SourceFactory.create(p)
+            self.srcs.append(source)
 
     def __iter__(self):
         pass
@@ -39,8 +50,12 @@ class CSVSource(self, source_input):
     def __init__(self, source_input)
         self.source_input = source_input
 
+        self.srcs = []
+
     def read_csv(self):
-        pass
+        for p in lines:
+            source = SourceFactory.create(p)
+            self.srcs.append(source)
 
     def __iter__(self):
         pass
@@ -52,8 +67,12 @@ class GlobSource(self, source_input):
     def __init__(self, source_input)
         self.source_input = source_input
 
+        self.srcs = []
+
     def collect_files(self):
-      pass
+        for p in paths:
+            source = SourceFactory.create(p)
+            self.srcs.append(source)
 
     def __iter__(self):
         pass

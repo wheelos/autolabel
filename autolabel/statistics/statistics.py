@@ -14,11 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-class SAM2:
+import abc
+
+class Statistics(metaclass=abc.ABCMeta):
+    """
+    """
+
     def __init__(self):
+        # label
+        self.total_label_nums
+        self.average_label_nums
+        self.average_label_size
+
+    def draw_label_statistics(self):
         pass
 
-    def predict(self, data):
-        """Input data, output prediction results
-        """
+    def draw_label_hotmap(self):
         pass

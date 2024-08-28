@@ -15,7 +15,18 @@
 # limitations under the License.
 
 
-class Point:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+class PromptType(Enum):
+    POINT = 1
+    AABBBOX = 2
+    POLYGON = 3
+    WORD = 4
+    SENTENCE = 5
+
+
+class Prompt:
+    def __init__(self, prompt_input):
+        self.prompt_input = prompt_input
+        self.check_type()
+
+    def check_type(self) -> None:
+        self.prompt_type

@@ -15,7 +15,21 @@
 # limitations under the License.
 
 
-class Point:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+class AABBBox:
+    """
+    (x_min, y_min)
+        +------------------------+
+        |                        |
+        |                        |
+        |                        |
+        |                        |
+        +------------------------+
+                        (x_max, y_max)
+    """
+    def __init__(self, xy_min, xy_max):
+        self.xy_min = xy_min
+        self.xy_max = xy_max
+
+class Polygon:
+    def __init__(self, points):
+        self.points = points

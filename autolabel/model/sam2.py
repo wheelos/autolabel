@@ -15,16 +15,30 @@
 # limitations under the License.
 
 import torch
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+from sam2.sam2_image_predictor import SAM2ImagePredictor, SAM2VideoPredictor
 
 class SAM2:
     def __init__(self):
-        self.predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
+        pass
 
-    def predict(self, data, prompt):
-        """Input data, output prediction results
-        """
+    def predict_image(self, data, prompt):
+        if not self.predictor:
+            self.predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
+
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             self.predictor.set_image(data)
             masks, _, _ = self.predictor.predict(prompt)
         return masks
+
+    def predict_video(self, data, prompt):
+        if not self.predictor:
+            self.predictor = SAM2VideoPredictor.from_pretrained("facebook/sam2-hiera-large")
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+            state = self.predictor.init_state(<your_video>)
+
+            # add new prompts and instantly get the output on the same frame
+            frame_idx, object_ids, masks = self.predictor.add_new_points_or_box(state, prompt)
+
+            # propagate the prompts to get masklets throughout the video
+            for frame_idx, object_ids, masks in self.predictor.propagate_in_video(state):
+                pass

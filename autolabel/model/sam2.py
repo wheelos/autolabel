@@ -14,11 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+
 class SAM2:
     def __init__(self):
-        pass
+        self.predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
 
     def predict(self, data, prompt):
         """Input data, output prediction results
         """
-        pass
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+            self.predictor.set_image(data)
+            masks, _, _ = self.predictor.predict(prompt)
+        return masks

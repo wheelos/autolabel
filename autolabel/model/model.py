@@ -18,7 +18,7 @@ from sam2 import SAM2
 
 
 class ModelFactory:
-    @static_method
+    @staticmethod
     def create(input_str : str):
         if input_str == "sam2":
             return SAM2()

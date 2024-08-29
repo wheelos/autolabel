@@ -15,6 +15,8 @@
 # limitations under the License.
 
 import abc
+from PIL.Image import Image
+
 
 class FileSource(metaclass=abc.ABCMeta):
     @property
@@ -23,14 +25,14 @@ class FileSource(metaclass=abc.ABCMeta):
       """return source data
       """
 
-
 class ImageFileSource(FileSource):
     def __init__(self, source_input):
         self.source_input = source_input
 
     @property
     def data(self):
-        pass
+        file_path = self.source_input.input
+        return Image.open(file_path)
 
 class PCDFileSource(FileSource):
     def __init__(self, source_input):
@@ -38,4 +40,4 @@ class PCDFileSource(FileSource):
 
     @property
     def data(self):
-        pass
+        raise NotImplementedError("Not support pcd for now!")

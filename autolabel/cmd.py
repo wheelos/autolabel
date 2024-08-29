@@ -19,13 +19,11 @@ import argparse
 import sys
 import logging
 
-TASKS = {
-    ("SAM2", "ImageFileSource") : autolabel_image,
-    ("SAM2", "VideoSource") : autolabel_video,
-}
+from source.source import SourceFactory
+from model.model import ModelFactory
+from prompt.prompt import Prompt
 
-def _task_key(key1, key2):
-    return (type(key1).__name__, type(key2).__name__)
+
 
 def autolabel_image(model, source, prompt):
     model.predict(source.data, prompt)
@@ -33,15 +31,23 @@ def autolabel_image(model, source, prompt):
 def autolabel_video(model, source, prompt):
     model.predict(source.data, prompt)
 
+def _task_key(key1, key2):
+    return (type(key1).__name__, type(key2).__name__)
+
 def dispatch_task(model, source, prompt):
+    TASKS = {
+        ("SAM2", "ImageFileSource") : autolabel_image,
+        ("SAM2", "VideoSource") : autolabel_video,
+    }
+
     task_name = _task_key(model, source)
     task = TASKS[task_name]
     task(model, source, prompt)
 
 def autolabel(source_input, prompt_input, model_input):
+    model = ModelFactory.create(model_input)
     source = SourceFactory.create(source_input)
     prompt = Prompt(prompt_input)
-    model = ModelFactory.create(model_input)
 
     dispatch_task(model, source, prompt)
 

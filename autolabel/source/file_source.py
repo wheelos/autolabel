@@ -19,7 +19,7 @@ import abc
 class FileSource(metaclass=abc.ABCMeta):
     @property
     @abc.abstractmetod
-    def data():
+    def data(self):
       """return source data
       """
 

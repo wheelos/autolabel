@@ -18,7 +18,7 @@ class SAM2:
     def __init__(self):
         pass
 
-    def predict(self, data):
+    def predict(self, data, prompt):
         """Input data, output prediction results
         """
         pass

@@ -33,7 +33,7 @@ class SourceInputType(Enum):
 
 
 class SourceInput:
-    def __init__(self, input_str):
+    def __init__(self, input_str : str) -> None:
         self.raw_input = input_str
         # Get source input type
         self.check_type()
@@ -64,6 +64,8 @@ class SourceInput:
             self.input_type = SourceInputType.SCREENSHOT
         elif is_glob(self.input):
             self.input_type = SourceInputType.GLOB_PATTERN
+        else:
+            raise NotImplementedError(f'Not supported type: {self.input}')
 
     @property
     def input(self):
@@ -78,6 +80,7 @@ class SourceFactory:
     @static_method
     def create(input_str : str):
         source_input = SourceInput(input_str)
+
         if source_input == SourceInputType.IMAGE_FILE
             return ImageFileSource(source_input)
         elif source_input == SourceInputType.POINT_CLOUD_FILE:
@@ -95,4 +98,4 @@ class SourceFactory:
         elif source_input == SourceInputType.VIDEO_FILE:
             return VideoSource(source_input)
         else:
-            raise NotImplementedError(f'TNot supported type: {input_str}')
+            raise NotImplementedError(f'Not supported type: {input_str}')

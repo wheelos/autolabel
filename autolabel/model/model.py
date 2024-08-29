@@ -14,22 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from sam2 import SAM2
 
-class AABBBox:
-    """
-    (x_min, y_min)
-        +------------------------+
-        |                        |
-        |                        |
-        |                        |
-        |                        |
-        +------------------------+
-                        (x_max, y_max)
-    """
-    def __init__(self, xy_min, xy_max):
-        self.xy_min = xy_min
-        self.xy_max = xy_max
 
-class Polygon:
-    def __init__(self, points):
-        self.points = points
+class ModelFactory:
+    @static_method
+    def create(input_str : str):
+        if input_str == "sam2":
+            return SAM2()

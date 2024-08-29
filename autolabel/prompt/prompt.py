@@ -25,7 +25,7 @@ class PromptType(Enum):
 
 class Prompt:
     def __init__(self, prompt_input):
-        self.prompt_input = prompt_input
+        self.raw_prompt = prompt_input
         self.check_type()
 
     def check_type(self) -> None:

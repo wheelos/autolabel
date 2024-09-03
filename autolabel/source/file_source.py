@@ -20,7 +20,7 @@ from PIL.Image import Image
 
 class FileSource(metaclass=abc.ABCMeta):
     @property
-    @abc.abstractmetod
+    @abc.abstractmethod
     def data(self):
       """return source data
       """

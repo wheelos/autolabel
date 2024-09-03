@@ -16,7 +16,7 @@
 
 import abc
 
-class StreamSourcce(metaclass=abc.ABCMeta):
+class StreamSource(metaclass=abc.ABCMeta):
     def __init__(self, interval):
         self.interval = interval
 

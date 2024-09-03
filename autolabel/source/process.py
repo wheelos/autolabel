@@ -15,6 +15,8 @@
 # limitations under the License.
 
 import logging
+import os
+import requests
 
 from pathlib import Path
 
@@ -61,6 +63,7 @@ def download_from_url(url : str) -> str:
 
 
 def url_process(src):
+    file_path = None
     try:
         file_path = download_from_url(src)
     except Exception as e:

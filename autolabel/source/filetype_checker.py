@@ -1,69 +1,89 @@
-"""
-This Python script contains functions to check various types of files and paths.
+#!/usr/bin/env python
 
-Usage:
-You can import these functions into your script and use them to check different types of files and paths. Additionally, you can add test code within the if __name__ == "__main__" block to validate the functionality of these functions.
-"""
+# Copyright 2024 wheelos <daohu527@gmail.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-import os
+
 import imghdr
 import fnmatch
 import mimetypes
+
+from pathlib import Path
+from urllib.parse import urlparse
+
 
 def is_file(src: str) -> bool:
     """
     Check if the given path is a file.
     """
-    return os.path.isfile(src)
+    return Path(src).is_file()
+
+def is_path(src: str) -> bool:
+    """
+    Check if the given path is a valid path.
+    """
+    return Path(src).exists()
+
+def is_url(src: str) -> bool:
+    """
+    Check if the source string is a valid URL.
+    """
+    try:
+        result = urlparse(src)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
 
 def is_stream(src: str) -> bool:
     """
-    Check if the given path represents a stream.
+    Check if the given path represents video stream.
     """
-    try:
-        with open(src, 'rb') as file:
-            return hasattr(file, 'readable') and hasattr(file, 'seekable')
-    except IOError:
-        return False
+    pattern = re.compile(r'^(rtsp://|rtmp://)[^\s/$.?#].[^\s]*$', re.IGNORECASE)
+    match = re.match(pattern, src)
+
+    return bool(match)
 
 def is_screenshot(src: str) -> bool:
     """
     Check if the given path is a screenshot.
     """
-    if not os.path.isfile(src) or not imghdr.what(src):
-        return False
+    pattern = r"^screen:\d+$"
+    match = re.match(pattern, src)
 
-    # Check if the image dimensions are within typical screenshot resolutions
-    typical_screenshot_resolutions = [(1920, 1080), (2560, 1440), (3840, 2160)]  # Add more if needed
+    return bool(match)
 
-    with open(src, 'rb') as f:
-        img_bytes = f.read(24)  # Read the first 24 bytes of the image file
-
-    width = img_bytes[16] + (img_bytes[17] << 8)
-    height = img_bytes[20] + (img_bytes[21] << 8)
-
-    for resolution in typical_screenshot_resolutions:
-        if (width, height) == resolution:
-            return True
-    return False
-
-def is_glob(src: str) -> bool:
+def is_glob_pattern(src: str) -> bool:
     """
     Check if the given path contains glob-style wildcards.
     """
-    return any(char in src for char in ('*', '?', '[')) or bool(fnmatch.translate(src))
+    pattern = r'^glob\(([^)]+)\)$'
+    match = re.match(pattern, src)
+
+    return bool(match)
 
 def is_video(src: str) -> bool:
     """
     Check if the given path is a video file.
     """
-    video_mime_types = ["video/mp4", "video/mpeg", "video/quicktime", "video/x-msvideo", "video/x-flv"]
+    image_mime_types = {
+        "image/jpeg", "image/png", "image/gif", "image/bmp",
+        "image/webp", "image/svg+xml", "image/x-icon", "image/tiff"
+    }
 
-    mime_type, _ = mimetypes.guess_type(src)
-    if mime_type in video_mime_types:
-        return True
-
-    return False
+    file_path = Path(src)
+    mime_type, _ = mimetypes.guess_type(file_path)
+    return mime_type in image_mime_types
 
 def is_image(src: str) -> bool:
     """
@@ -75,20 +95,10 @@ def is_pcd(src: str) -> bool:
     """
     Check if the given path is a PCD file.
     """
-    if src.endswith('.pcd'):
-        return True
-    else:
-        return False
-    
+    return Path(src).suffix.lower() == '.pcd'
+
 def is_csv(src: str) -> bool:
     """
     Check if the given path is a CSV file.
     """
-    return src.lower().endswith('.csv')
-
-def is_path(src: str) -> bool:
-    """
-    Check if the given path is a valid path.
-    """
-    return os.path.exists(src)
-
+    return Path(src).suffix.lower() == '.csv'

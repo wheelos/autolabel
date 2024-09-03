@@ -46,8 +46,8 @@ class DirSource(IterSource):
     def __next__(self):
         pass
 
-class CSVSource(self, source_input):
-    def __init__(self, source_input)
+class CSVSource(IterSource):
+    def __init__(self, source_input):
         self.source_input = source_input
 
         self.srcs = []
@@ -63,8 +63,8 @@ class CSVSource(self, source_input):
     def __next__(self):
         pass
 
-class GlobSource(self, source_input):
-    def __init__(self, source_input)
+class GlobSource(IterSource):
+    def __init__(self, source_input):
         self.source_input = source_input
 
         self.srcs = []

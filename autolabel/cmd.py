@@ -19,32 +19,35 @@ import argparse
 import sys
 import logging
 
-from source.source import SourceFactory
-from model.model import ModelFactory
-from prompt.prompt import Prompt
-
+from autolabel.source.source import SourceFactory
+from autolabel.model.model import ModelFactory
+from autolabel.prompt.prompt import Prompt
 
 
 def autolabel_image(model, source, prompt):
     model.predict(source.data, prompt)
 
+
 def autolabel_video(model, source, prompt):
     model.predict(source.data, prompt)
 
-def _task_key(key1, key2):
-    return (type(key1).__name__, type(key2).__name__)
 
 def dispatch_task(model, source, prompt):
     TASKS = {
-        ("SAM2", "ImageFileSource") : autolabel_image,
-        ("SAM2", "VideoSource") : autolabel_video,
+        ("SAM2", "ImageFileSource"): autolabel_image,
+        ("SAM2", "VideoSource"): autolabel_video,
     }
 
-    task_name = _task_key(model, source)
-    task = TASKS[task_name]
+    task = TASKS.get((type(model).__name__, type(source).__name__))
+
+    if task is None:
+        raise ValueError(
+            f"No task found for model: {type(model).__name__}, source: {type(source).__name__}")
+
     task(model, source, prompt)
 
-def autolabel(source_input, prompt_input, model_input):
+
+def autolabel(model_input, source_input, prompt_input):
     model = ModelFactory.create(model_input)
     source = SourceFactory.create(source_input)
     prompt = Prompt(prompt_input)
@@ -75,4 +78,4 @@ def main(args=sys.argv):
     args = parser.parse_args(args[1:])
 
     # auto label
-    autolabel(args.source, args.prompt, args.model)
+    autolabel(args.model, args.source, args.prompt)

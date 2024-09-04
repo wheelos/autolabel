@@ -15,6 +15,13 @@
 # limitations under the License.
 
 import abc
+import csv
+import glob
+import re
+from pathlib import Path
+
+from autolabel.source.source import SourceFactory
+
 
 class IterSource(metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -25,57 +32,47 @@ class IterSource(metaclass=abc.ABCMeta):
     def __next__(self):
         pass
 
+
 class DirSource(IterSource):
     """
     use SourceFactory.create iter create each object in
     path (can be a path, a file)
     """
+
     def __init__(self, source_input):
         self.source_input = source_input
-
-        self.srcs = []
-
-    def process(self):
-        for p in path:
-            source = SourceFactory.create(p)
-            self.srcs.append(source)
+        self.path = Path(self.source_input.input)
 
     def __iter__(self):
-        pass
+        for p in self.path.iterdir():
+            yield SourceFactory.create(p)
 
-    def __next__(self):
-        pass
 
 class CSVSource(IterSource):
     def __init__(self, source_input):
         self.source_input = source_input
-
-        self.srcs = []
-
-    def read_csv(self):
-        for p in lines:
-            source = SourceFactory.create(p)
-            self.srcs.append(source)
+        self.file_path = Path(self.source_input.input)
 
     def __iter__(self):
-        pass
+        with open(self.file_path, 'r') as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                yield SourceFactory.create(row)
 
-    def __next__(self):
-        pass
 
 class GlobSource(IterSource):
     def __init__(self, source_input):
         self.source_input = source_input
+        self.pattern = self._extract_glob_pattern(self.source_input.input)
 
-        self.srcs = []
-
-    def collect_files(self):
-        for p in paths:
-            source = SourceFactory.create(p)
-            self.srcs.append(source)
+    def _extract_glob_pattern(self, glob_string):
+        pattern = r'^glob\(([^)]+)\)$'
+        match = re.search(pattern, glob_string)
+        if match:
+            return match.group(1)
+        else:
+            return None
 
     def __iter__(self):
-        pass
-
-    def __next__(self):
-        pass
+        for file in glob.glob(self.pattern):
+            yield SourceFactory.create(file)

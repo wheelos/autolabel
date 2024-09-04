@@ -16,7 +16,7 @@
 
 
 import imghdr
-import fnmatch
+import re
 import mimetypes
 
 from pathlib import Path
@@ -29,11 +29,13 @@ def is_file(src: str) -> bool:
     """
     return Path(src).is_file()
 
+
 def is_path(src: str) -> bool:
     """
     Check if the given path is a valid path.
     """
     return Path(src).exists()
+
 
 def is_url(src: str) -> bool:
     """
@@ -45,14 +47,17 @@ def is_url(src: str) -> bool:
     except ValueError:
         return False
 
+
 def is_stream(src: str) -> bool:
     """
     Check if the given path represents video stream.
     """
-    pattern = re.compile(r'^(rtsp://|rtmp://)[^\s/$.?#].[^\s]*$', re.IGNORECASE)
+    pattern = re.compile(
+        r'^(rtsp://|rtmp://)[^\s/$.?#].[^\s]*$', re.IGNORECASE)
     match = re.match(pattern, src)
 
     return bool(match)
+
 
 def is_screenshot(src: str) -> bool:
     """
@@ -63,6 +68,7 @@ def is_screenshot(src: str) -> bool:
 
     return bool(match)
 
+
 def is_glob_pattern(src: str) -> bool:
     """
     Check if the given path contains glob-style wildcards.
@@ -71,6 +77,7 @@ def is_glob_pattern(src: str) -> bool:
     match = re.match(pattern, src)
 
     return bool(match)
+
 
 def is_video(src: str) -> bool:
     """
@@ -85,17 +92,20 @@ def is_video(src: str) -> bool:
     mime_type, _ = mimetypes.guess_type(file_path)
     return mime_type in image_mime_types
 
+
 def is_image(src: str) -> bool:
     """
     Check if the given path is an image file.
     """
     return imghdr.what(src) is not None
 
+
 def is_pcd(src: str) -> bool:
     """
     Check if the given path is a PCD file.
     """
     return Path(src).suffix.lower() == '.pcd'
+
 
 def is_csv(src: str) -> bool:
     """

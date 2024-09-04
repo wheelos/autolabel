@@ -16,10 +16,16 @@
 
 import pytest
 
-from autolabel.source.source import SourceInput, SourceInputType
+from autolabel.source.source import SourceInput, SourceInputType, SourceFactory
 
 def test_url():
     url = "https://via.placeholder.com/300/09f/fff.png"
     src = SourceInput(url)
-    assert src.input == url
+    assert src.input == "/tmp/fff.png"
     assert src.type == SourceInputType.IMAGE_FILE
+
+
+def test_image_file_source():
+    url = "https://via.placeholder.com/300/09f/fff.png"
+    source = SourceFactory.create(url)
+    assert source.data is not None

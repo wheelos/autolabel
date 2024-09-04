@@ -33,6 +33,7 @@ from autolabel.source.iter_source import DirSource, CSVSource, GlobSource
 from autolabel.source.stream_source import ScreenshotSource, VideoSource, VideoStreamSource
 from autolabel.source.process import url_process
 
+
 class SourceInputType(Enum):
     IMAGE_FILE = 1
     POINT_CLOUD_FILE = 2
@@ -45,43 +46,45 @@ class SourceInputType(Enum):
 
 
 class SourceInput:
-    def __init__(self, input_str : str) -> None:
+    def __init__(self, input_str: str) -> None:
         self.raw_input = input_str
-        # Get source input type
-        self.check_type()
 
-    def check_type(self) -> None:
+        self._input = self._process_input(input_str)
+        # Get source input type
+        self.input_type = self._get_source_type()
+
+    def _process_input(self, input_str):
         # If "raw_input" is a url, we first download it to the tmp directory
         # and then process it as a file
-        if is_url(self.raw_input):
-            raw_input = url_process(self.raw_input)
+        if is_url(input_str):
+            return url_process(input_str)
         else:
-            raw_input = self.raw_input
+            return input_str
 
-        # Returns the source input type according to the "raw_input" string
-        if is_file(raw_input):
-            if is_image(raw_input):
-                self.input_type = SourceInputType.IMAGE_FILE
-            elif is_video(raw_input):
-                self.input_type = SourceInputType.VIDEO_FILE
-            elif is_pcd(raw_input):
-                self.input_type = SourceInputType.POINT_CLOUD_FILE
-            elif is_csv(raw_input):
-                self.input_type = SourceInputType.CSV_FILE
-        elif is_path(raw_input):
-            self.input_type = SourceInputType.DIRECTORY
-        elif is_stream(raw_input):
-            self.input_type = SourceInputType.VIDEO_STREAM
-        elif is_screenshot(raw_input):
-            self.input_type = SourceInputType.SCREENSHOT
-        elif is_glob_pattern(raw_input):
-            self.input_type = SourceInputType.GLOB_PATTERN
+    def _get_source_type(self) -> None:
+        if is_file(self._input):
+            if is_image(self._input):
+                return SourceInputType.IMAGE_FILE
+            elif is_video(self._input):
+                return SourceInputType.VIDEO_FILE
+            elif is_pcd(self._input):
+                return SourceInputType.POINT_CLOUD_FILE
+            elif is_csv(self._input):
+                return SourceInputType.CSV_FILE
+        elif is_path(self._input):
+            return SourceInputType.DIRECTORY
+        elif is_stream(self._input):
+            return SourceInputType.VIDEO_STREAM
+        elif is_screenshot(self._input):
+            return SourceInputType.SCREENSHOT
+        elif is_glob_pattern(self._input):
+            return SourceInputType.GLOB_PATTERN
         else:
-            raise NotImplementedError(f'Not supported type: {raw_input}')
+            raise NotImplementedError(f'Not supported type: {self._input}')
 
     @property
     def input(self):
-        return self.raw_input
+        return self._input
 
     @property
     def type(self):
@@ -90,24 +93,25 @@ class SourceInput:
 
 class SourceFactory:
     @staticmethod
-    def create(input_str : str):
+    def create(input_str: str):
         source_input = SourceInput(input_str)
+        source_type = source_input.type
 
-        if source_input == SourceInputType.IMAGE_FILE:
+        if source_type == SourceInputType.IMAGE_FILE:
             return ImageFileSource(source_input)
-        elif source_input == SourceInputType.POINT_CLOUD_FILE:
+        elif source_type == SourceInputType.POINT_CLOUD_FILE:
             return PCDFileSource(source_input)
-        elif source_input == SourceInputType.DIRECTORY:
+        elif source_type == SourceInputType.DIRECTORY:
             return DirSource(source_input)
-        elif source_input == SourceInputType.CSV_FILE:
+        elif source_type == SourceInputType.CSV_FILE:
             return CSVSource(source_input)
-        elif source_input == SourceInputType.GLOB_PATTERN:
+        elif source_type == SourceInputType.GLOB_PATTERN:
             return GlobSource(source_input)
-        elif source_input == SourceInputType.SCREENSHOT:
+        elif source_type == SourceInputType.SCREENSHOT:
             return ScreenshotSource(source_input)
-        elif source_input == SourceInputType.VIDEO_STREAM:
+        elif source_type == SourceInputType.VIDEO_STREAM:
             return VideoStreamSource(source_input)
-        elif source_input == SourceInputType.VIDEO_FILE:
+        elif source_type == SourceInputType.VIDEO_FILE:
             return VideoSource(source_input)
         else:
-            raise NotImplementedError(f'Not supported type: {input_str}')
+            raise NotImplementedError(f'Not supported type: {source_type}')

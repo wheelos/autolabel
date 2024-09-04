@@ -15,18 +15,13 @@
 # limitations under the License.
 
 
-class PromptType(Enum):
-    POINT = 1
-    AABBBOX = 2
-    POLYGON = 3
-    WORD = 4
-    SENTENCE = 5
+import yaml
+import numpy as np
 
 
 class Prompt:
-    def __init__(self, prompt_input):
-        self.raw_prompt = prompt_input
-        self.check_type()
-
-    def check_type(self) -> None:
-        self.prompt_type
+    def __init__(self, point_coords, point_labels, box, mask_input):
+        self.point_coords = point_coords
+        self.point_labels = point_labels
+        self.box = box
+        self.mask_input = mask_input

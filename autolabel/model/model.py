@@ -14,11 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sam2 import SAM2
+from autolabel.model.sam2 import SAM2
 
+
+from typing import Dict, Any
 
 class ModelFactory:
-    @staticmethod
-    def create(input_str : str):
-        if input_str == "sam2":
-            return SAM2()
+
+    _model_classes = {
+        "sam2": "SAM2",
+    }
+
+    @classmethod
+    def create(cls, model_name: str, **kwargs) -> Any:
+        try:
+            model_class = getattr(__import__(cls.__module__), cls._model_classes[model_name])
+            return model_class(**kwargs)
+        except KeyError:
+            raise ValueError(f"Unknown model: {model_name}")

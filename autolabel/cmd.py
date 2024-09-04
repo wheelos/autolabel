@@ -19,17 +19,17 @@ import argparse
 import sys
 import logging
 
-from autolabel.source.source_input import SourceFactory
+from autolabel.source.source_factory import SourceFactory
 from autolabel.model.model import ModelFactory
 from autolabel.prompt.prompt import Prompt
 
 
 def autolabel_image(model, source, prompt):
-    model.predict(source.data, prompt)
+    model.predict_image(source.data, prompt)
 
 
 def autolabel_video(model, source, prompt):
-    model.predict(source.data, prompt)
+    model.predict_video(source.data, prompt)
 
 
 def dispatch_task(model, source, prompt):
@@ -47,10 +47,27 @@ def dispatch_task(model, source, prompt):
     task(model, source, prompt)
 
 
-def autolabel(model_input, source_input, prompt_input):
-    model = ModelFactory.create(model_input)
+def autolabel(config_file):
+    with open(config_file, 'r') as f:
+        data = yaml.safe_load(f)
+
+    # model
+    model_name = data['model']['name']
+    task_type = data['model']['task_type']
+
+    # source
+    source_input = data['source']
+
+    # prompt
+    prompt = data['prompt']
+    point_coords = np.array(prompt['point_coords'])
+    point_labels = np.array(prompt['point_labels'])
+    box = np.array(prompt['box'])
+    mask_input = np.array(prompt['mask_input'])
+
+    model = ModelFactory.create(model_name, task_type)
     source = SourceFactory.create(source_input)
-    prompt = Prompt(prompt_input)
+    prompt = Prompt(point_coords, point_labels, box, mask_input)
 
     dispatch_task(model, source, prompt)
 
@@ -74,8 +91,12 @@ def main(args=sys.argv):
     parser.add_argument(
         "-m", "--model", action="store", type=str, required=False,
         nargs='?', const="", help="model")
+    parser.add_argument(
+        "-c", "--config", action="store", type=str, required=False,
+        nargs='?', const="", help="config")
 
     args = parser.parse_args(args[1:])
 
     # auto label
-    autolabel(args.model, args.source, args.prompt)
+    if args.config:
+        autolabel(args.config)

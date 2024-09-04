@@ -30,7 +30,12 @@ class SAM2:
     def predict_image(self, data, prompt):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             self.predictor.set_image(data)
-            masks, _, _ = self.predictor.predict(prompt)
+            masks, scores, logits = self.predictor.predict(
+                point_coords=prompt.point_coords,
+                point_labels=prompt.point_labels,
+                box=prompt.box,
+                mask_input=prompt.mask_input,
+                multimask_output=False)
         return masks
 
     def predict_video(self, data, prompt):
@@ -39,7 +44,7 @@ class SAM2:
 
             # add new prompts and instantly get the output on the same frame
             frame_idx, object_ids, masks = self.predictor.add_new_points_or_box(
-                state, prompt)
+                state, points=prompt.point_coords, labels=prompt.point_labels, box=prompt.box)
 
             # propagate the prompts to get masklets throughout the video
             for frame_idx, object_ids, masks in self.predictor.propagate_in_video(state):

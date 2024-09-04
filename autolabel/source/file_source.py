@@ -19,6 +19,9 @@ from PIL import Image
 
 
 class FileSource(metaclass=abc.ABCMeta):
+    def __init__(self, source_input) -> None:
+        self.source_input = source_input
+
     @property
     @abc.abstractmethod
     def data(self):
@@ -28,7 +31,7 @@ class FileSource(metaclass=abc.ABCMeta):
 
 class ImageFileSource(FileSource):
     def __init__(self, source_input):
-        self.source_input = source_input
+        super().__init__(source_input)
         self._data = None
 
     @property
@@ -46,7 +49,7 @@ class ImageFileSource(FileSource):
 
 class PCDFileSource(FileSource):
     def __init__(self, source_input):
-        self.source_input = source_input
+        super().__init__(source_input)
         self._data = None
 
     @property

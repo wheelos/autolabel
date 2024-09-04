@@ -19,7 +19,7 @@ import argparse
 import sys
 import logging
 
-from autolabel.source.source import SourceFactory
+from autolabel.source.source_input import SourceFactory
 from autolabel.model.model import ModelFactory
 from autolabel.prompt.prompt import Prompt
 

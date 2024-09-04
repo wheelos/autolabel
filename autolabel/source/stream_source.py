@@ -23,17 +23,14 @@ from typing import Iterator, List
 
 
 class StreamSource(metaclass=abc.ABCMeta):
-    def __init__(self, interval: int):
+    def __init__(self, source_input: str, interval: int):
         if interval <= 0:
             raise ValueError("Interval must be positive")
         self._interval = interval
+        self.source_input = source_input
 
     @abc.abstractmethod
     def __iter__(self) -> Iterator['StreamSource']:
-        pass
-
-    @abc.abstractmethod
-    def __next__(self) -> object:
         pass
 
     @abc.abstractmethod
@@ -77,46 +74,92 @@ class ScreenshotSource(StreamSource):
             yield self.capture()
             time.sleep(self.interval)
 
-    def __next__(self) -> Image.Image:
-        return self.capture()
-
 
 class VideoSource(StreamSource):
-    def __init__(self, interval: int):
-        super().__init__(interval)
+    def __init__(self, source_input: str, interval: int):
+        super().__init__(source_input, interval)
+        video_path = self.source_input.input
+        self.cap = cv2.VideoCapture(video_path)
+        if not self.cap.isOpened():
+            raise ValueError(
+                f"Could not open video source: {video_path}")
 
-    def capture(self):
-        pass
+    def capture(self) -> Image.Image:
+        ret, frame = self.cap.read()
+        if not ret:
+            raise ValueError("End of video stream")
+        return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    def slice(self):
-        """return video slice
-        """
-        pass
+    def slice(self, duration: float) -> List[Image.Image]:
+        images = []
+        start_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+        # Convert duration to milliseconds
+        end_time = start_time + (duration * 1000)
+
+        while self.cap.get(cv2.CAP_PROP_POS_MSEC) < end_time:
+            try:
+                images.append(self.capture())
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES,
+                             self.cap.get(cv2.CAP_PROP_POS_FRAMES) + self.interval)
+            except StopIteration:
+                break
+
+        return images
 
     def __iter__(self):
-        pass
+        while True:
+            yield self.capture()
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES,
+                         self.cap.get(cv2.CAP_PROP_POS_FRAMES) + self.interval)
 
-    def __next__(self):
-        pass
+    def __del__(self):
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__del__()
 
 
 class VideoStreamSource(StreamSource):
-    """webcam, stream and so on.
-    """
+    def __init__(self, source_input: str, interval: int):
+        super().__init__(source_input, interval)
+        video_url = self.source_input.input
+        self.cap = cv2.VideoCapture(video_url)
+        if not self.cap.isOpened():
+            raise ValueError(
+                f"Could not open video source: {video_url}")
 
-    def __init__(self, interval: int):
-        super().__init__(interval)
+    def capture(self) -> Image.Image:
+        ret, frame = self.cap.read()
+        if not ret:
+            raise ValueError("Read video stream failed!")
+        return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    def capture(self):
-        pass
-
-    def slice(self):
-        """return video slice
-        """
-        pass
+    def slice(self, duration: float) -> List[Image.Image]:
+        images = []
+        end_time = time.time() + duration
+        while time.time() < end_time:
+            try:
+                images.append(self.capture())
+                time.sleep(self.interval)
+            except ValueError:
+                break
+        return images
 
     def __iter__(self):
-        pass
+        while True:
+            yield self.capture()
+            time.sleep(self.interval)
 
-    def __next__(self):
-        pass
+    def __del__(self):
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__del__()

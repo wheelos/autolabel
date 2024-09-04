@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
 
-from autolabel.source.source import SourceInput, SourceInputType, SourceFactory
+from autolabel.source.source_factory import SourceFactory
+from autolabel.source.source_input import SourceInput, SourceInputType
+
 
 def test_url():
     url = "https://via.placeholder.com/300/09f/fff.png"

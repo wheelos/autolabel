@@ -28,9 +28,7 @@ from autolabel.source.filetype_checker import (
     is_screenshot,
     is_glob_pattern
 )
-from autolabel.source.file_source import ImageFileSource, PCDFileSource
-from autolabel.source.iter_source import DirSource, CSVSource, GlobSource
-from autolabel.source.stream_source import ScreenshotSource, VideoSource, VideoStreamSource
+
 from autolabel.source.process import url_process
 
 
@@ -51,7 +49,7 @@ class SourceInput:
 
         self._input = self._process_input(input_str)
         # Get source input type
-        self.input_type = self._get_source_type()
+        self._input_type = self._get_source_type()
 
     def _process_input(self, input_str):
         # If "raw_input" is a url, we first download it to the tmp directory
@@ -88,30 +86,4 @@ class SourceInput:
 
     @property
     def type(self):
-        return self.input_type
-
-
-class SourceFactory:
-    @staticmethod
-    def create(input_str: str):
-        source_input = SourceInput(input_str)
-        source_type = source_input.type
-
-        if source_type == SourceInputType.IMAGE_FILE:
-            return ImageFileSource(source_input)
-        elif source_type == SourceInputType.POINT_CLOUD_FILE:
-            return PCDFileSource(source_input)
-        elif source_type == SourceInputType.DIRECTORY:
-            return DirSource(source_input)
-        elif source_type == SourceInputType.CSV_FILE:
-            return CSVSource(source_input)
-        elif source_type == SourceInputType.GLOB_PATTERN:
-            return GlobSource(source_input)
-        elif source_type == SourceInputType.SCREENSHOT:
-            return ScreenshotSource(source_input)
-        elif source_type == SourceInputType.VIDEO_STREAM:
-            return VideoStreamSource(source_input)
-        elif source_type == SourceInputType.VIDEO_FILE:
-            return VideoSource(source_input)
-        else:
-            raise NotImplementedError(f'Not supported type: {source_type}')
+        return self._input_type

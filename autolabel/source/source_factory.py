@@ -20,10 +20,15 @@ import glob
 import re
 from pathlib import Path
 
-from autolabel.source.source import SourceFactory
+from autolabel.source.source_input import SourceInput, SourceInputType
+from autolabel.source.file_source import ImageFileSource, PCDFileSource
+from autolabel.source.stream_source import ScreenshotSource, VideoSource, VideoStreamSource
 
 
 class IterSource(metaclass=abc.ABCMeta):
+    def __init__(self, source_input) -> None:
+        self.source_input = source_input
+
     @abc.abstractmethod
     def __iter__(self):
         pass
@@ -40,7 +45,7 @@ class DirSource(IterSource):
     """
 
     def __init__(self, source_input):
-        self.source_input = source_input
+        super().__init__(source_input)
         self.path = Path(self.source_input.input)
 
     def __iter__(self):
@@ -50,7 +55,7 @@ class DirSource(IterSource):
 
 class CSVSource(IterSource):
     def __init__(self, source_input):
-        self.source_input = source_input
+        super().__init__(source_input)
         self.file_path = Path(self.source_input.input)
 
     def __iter__(self):
@@ -62,7 +67,7 @@ class CSVSource(IterSource):
 
 class GlobSource(IterSource):
     def __init__(self, source_input):
-        self.source_input = source_input
+        super().__init__(source_input)
         self.pattern = self._extract_glob_pattern(self.source_input.input)
 
     def _extract_glob_pattern(self, glob_string):
@@ -76,3 +81,29 @@ class GlobSource(IterSource):
     def __iter__(self):
         for file in glob.glob(self.pattern):
             yield SourceFactory.create(file)
+
+
+class SourceFactory:
+    @staticmethod
+    def create(input_str: str):
+        source_input = SourceInput(input_str)
+        source_type = source_input.type
+
+        if source_type == SourceInputType.IMAGE_FILE:
+            return ImageFileSource(source_input)
+        elif source_type == SourceInputType.POINT_CLOUD_FILE:
+            return PCDFileSource(source_input)
+        elif source_type == SourceInputType.DIRECTORY:
+            return DirSource(source_input)
+        elif source_type == SourceInputType.CSV_FILE:
+            return CSVSource(source_input)
+        elif source_type == SourceInputType.GLOB_PATTERN:
+            return GlobSource(source_input)
+        elif source_type == SourceInputType.SCREENSHOT:
+            return ScreenshotSource(source_input)
+        elif source_type == SourceInputType.VIDEO_STREAM:
+            return VideoStreamSource(source_input)
+        elif source_type == SourceInputType.VIDEO_FILE:
+            return VideoSource(source_input)
+        else:
+            raise NotImplementedError(f'Not supported type: {source_type}')

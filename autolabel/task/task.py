@@ -20,7 +20,7 @@ import abc
 class Task(metaclass=abc.ABCMeta):
     def __init__(self) -> None:
         self._data = None
-        self._prompt = None
+        self._prompts = []
 
     @abc.abstractmethod
     def set_data(self, data):

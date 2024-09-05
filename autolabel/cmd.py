@@ -24,7 +24,7 @@ import numpy as np
 from autolabel.source.source_factory import SourceFactory
 from autolabel.model.model_factory import ModelFactory
 from autolabel.prompt.prompt import Prompt
-from task.image_label_task import ImageLabelTask
+from autolabel.task.image_label_task import ImageLabelTask
 
 
 class TaskType(Enum):

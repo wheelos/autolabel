@@ -18,8 +18,13 @@ Install "autolabel" by the following command.
 pip3 install 'git+https://github.com/facebookresearch/segment-anything-2.git'
 
 # install autolabel
-pip3 install 'git+https://github.com/wheelos/autolabel.git'
+cd autolabel & pip3 install -e .
 # pip3 install whl-autolabel
+```
+
+download pretrained model
+```
+cd autolabel/checkpoints/ & bash download_ckpts.sh
 ```
 
 ## Command
@@ -30,3 +35,11 @@ autolabel -c=autolabel/conf.yaml
 ```
 
 ## Parameters
+
+## Questiones
+
+1. ImportError: libGL.so.1: cannot open shared object file: No such file or directory
+
+```
+pip install opencv-python-headless
+```

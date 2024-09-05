@@ -14,14 +14,19 @@
 ## Quick start
 Install "autolabel" by the following command.
 ```sh
-pip3 install whl-autolabel
+# install sam2
+pip3 install 'git+https://github.com/facebookresearch/segment-anything-2.git'
+
+# install autolabel
+pip3 install 'git+https://github.com/wheelos/autolabel.git'
+# pip3 install whl-autolabel
 ```
 
 ## Command
 You can easily automatically label images using the following command.
 
 ```
-autolabel source="cat.jpg" prompt="(112, 113)" model="sam2.pt"
+autolabel -c=autolabel/conf.yaml
 ```
 
 ## Parameters

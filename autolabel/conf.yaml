@@ -1,7 +1,8 @@
+task_type: image_label
 model:
-  name: sam2
-  task_type: segmentation
-source: image.jpg
+  checkpoint: autolabel/checkpoints/sam2_hiera_large.pt
+  model_cfg: sam2_hiera_l.yaml
+source: autolabel/images/cars.jpg
 prompt:
   point_coords:
     - [10, 20]

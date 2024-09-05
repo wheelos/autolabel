@@ -16,60 +16,55 @@
 
 
 import argparse
+from enum import Enum
 import sys
-import logging
+import yaml
+import numpy as np
 
 from autolabel.source.source_factory import SourceFactory
-from autolabel.model.model import ModelFactory
+from autolabel.model.model_factory import ModelFactory
 from autolabel.prompt.prompt import Prompt
+from task.image_label_task import ImageLabelTask
 
 
-def autolabel_image(model, source, prompt):
-    model.predict_image(source.data, prompt)
+class TaskType(Enum):
+    IMAGE_LABEL = "image_label"
+    VIDEO_LABEL = "video_label"
 
 
-def autolabel_video(model, source, prompt):
-    model.predict_video(source.data, prompt)
-
-
-def dispatch_task(model, source, prompt):
-    TASKS = {
-        ("SAM2", "ImageFileSource"): autolabel_image,
-        ("SAM2", "VideoSource"): autolabel_video,
-    }
-
-    task = TASKS.get((type(model).__name__, type(source).__name__))
-
-    if task is None:
-        raise ValueError(
-            f"No task found for model: {type(model).__name__}, source: {type(source).__name__}")
-
-    task(model, source, prompt)
+def dispatch_task(task_type, model, source, prompt):
+    if TaskType(task_type) == TaskType.IMAGE_LABEL:
+        task = ImageLabelTask(model)
+        task.set_data(source)
+        task.add_prompt(prompt)
+        masks = task.process()
 
 
 def autolabel(config_file):
     with open(config_file, 'r') as f:
         data = yaml.safe_load(f)
 
+    # task_type
+    task_type = data['task_type']
+
     # model
-    model_name = data['model']['name']
-    task_type = data['model']['task_type']
+    model = data['model']['checkpoint']
+    model_cfg = data['model']['model_cfg']
+    model = ModelFactory.create(model, model_cfg)
 
     # source
-    source_input = data['source']
+    source = SourceFactory.create(data['source'])
 
     # prompt
-    prompt = data['prompt']
-    point_coords = np.array(prompt['point_coords'])
-    point_labels = np.array(prompt['point_labels'])
-    box = np.array(prompt['box'])
-    mask_input = np.array(prompt['mask_input'])
+    prompt_data = data['prompt']
+    prompt = Prompt(
+        np.array(prompt_data['point_coords']),
+        np.array(prompt_data['point_labels']),
+        np.array(prompt_data['box']),
+        np.array(prompt_data['mask_input'])
+    )
 
-    model = ModelFactory.create(model_name, task_type)
-    source = SourceFactory.create(source_input)
-    prompt = Prompt(point_coords, point_labels, box, mask_input)
-
-    dispatch_task(model, source, prompt)
+    dispatch_task(task_type, model, source, prompt)
 
 
 def main(args=sys.argv):

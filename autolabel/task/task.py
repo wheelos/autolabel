@@ -14,21 +14,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from autolabel.model.sam2 import SAM2
+import abc
 
 
-from typing import Dict, Any
+class Task(metaclass=abc.ABCMeta):
+    def __init__(self) -> None:
+        self._data = None
+        self._prompt = None
 
-class ModelFactory:
+    @abc.abstractmethod
+    def set_data(self, data):
+        pass
 
-    _model_classes = {
-        "sam2": "SAM2",
-    }
+    @abc.abstractmethod
+    def add_prompt(self, prompt):
+        pass
 
-    @classmethod
-    def create(cls, model_name: str, **kwargs) -> Any:
-        try:
-            model_class = getattr(__import__(cls.__module__), cls._model_classes[model_name])
-            return model_class(**kwargs)
-        except KeyError:
-            raise ValueError(f"Unknown model: {model_name}")
+    @abc.abstractmethod
+    def del_prompt(self, prompt):
+        pass
+
+    @abc.abstractmethod
+    def process(self):
+        # return label results
+        pass

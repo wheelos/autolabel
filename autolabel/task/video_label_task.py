@@ -15,30 +15,28 @@
 # limitations under the License.
 
 import torch
-from sam2.sam2_image_predictor import SAM2ImagePredictor, SAM2VideoPredictor
+
+from autolabel.task.task import Task
+
+from sam2.sam2_image_predictor import SAM2VideoPredictor
 
 
-class SAM2:
-    def __init__(self, task_type):
-        if task_type == "video":
-            self.predictor = SAM2VideoPredictor.from_pretrained(
-                "facebook/sam2-hiera-large")
-        elif task_type == "image":
-            self.predictor = SAM2ImagePredictor.from_pretrained(
-                "facebook/sam2-hiera-large")
+class VideoLabelTask(Task):
+    def __init__(self) -> None:
+        super().__init__()
+        self.predictor = SAM2VideoPredictor.from_pretrained(
+            "facebook/sam2-hiera-large")
 
-    def predict_image(self, data, prompt):
-        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-            self.predictor.set_image(data)
-            masks, scores, logits = self.predictor.predict(
-                point_coords=prompt.point_coords,
-                point_labels=prompt.point_labels,
-                box=prompt.box,
-                mask_input=prompt.mask_input,
-                multimask_output=False)
-        return masks
+    def set_data(self, data):
+        pass
 
-    def predict_video(self, data, prompt):
+    def add_prompt(self, prompt):
+        pass
+
+    def del_prompt(self, prompt):
+        pass
+
+    def process(self):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             state = self.predictor.init_state( < your_video > )
 

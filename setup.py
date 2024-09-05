@@ -23,6 +23,7 @@ setuptools.setup(
     package_dir={"": "."},
     packages=setuptools.find_packages(where="."),
     install_requires=[
+        "opencv-python"
     ],
     entry_points={
         'console_scripts': [

@@ -20,6 +20,7 @@ import numpy as np
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 from autolabel.task.task import Task
+from autolabel.vis.vis import show_masks
 
 
 class ImageLabelTask(Task):
@@ -28,7 +29,7 @@ class ImageLabelTask(Task):
         self._predictor = SAM2ImagePredictor(model)
 
     def set_data(self, data):
-        self._data = data
+        self._data = np.array(data.convert("RGB"))
 
     def add_prompt(self, prompt):
         self._prompts.append(prompt)
@@ -73,4 +74,7 @@ class ImageLabelTask(Task):
                 box=box,
                 mask_input=mask_input,
                 multimask_output=False)
+
+        show_masks(self._data, masks, scores, point_coords=point_coords,
+                   input_labels=point_labels, box_coords=box, borders=True)
         return masks

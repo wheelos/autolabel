@@ -1,4 +1,4 @@
-task_type: image_label
+task_type: image_segment
 model:
   checkpoint: autolabel/checkpoints/sam2_hiera_large.pt
   model_cfg: sam2_hiera_l.yaml

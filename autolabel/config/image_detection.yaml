@@ -1,0 +1,5 @@
+task_type: image_detection
+model:
+  checkpoint: autolabel/checkpoints/yolov8n.pt
+  # model_cfg:
+source: autolabel/images/truck.jpg

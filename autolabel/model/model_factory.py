@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import torch
+from ultralytics import YOLO
 from sam2.build_sam import build_sam2
 
 
@@ -50,5 +51,7 @@ class ModelFactory:
         device = _get_device()
         if 'sam2' in model.lower():
             return build_sam2(model_cfg, model, device=device)
+        elif 'yolo' in model.lower():
+            return YOLO(model)
         else:
             raise ValueError(f"Model '{model}' is not supported.")

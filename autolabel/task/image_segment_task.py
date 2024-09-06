@@ -23,7 +23,7 @@ from autolabel.task.task import Task
 from autolabel.vis.vis import show_masks
 
 
-class ImageLabelTask(Task):
+class ImageSegmentTask(Task):
     def __init__(self, model) -> None:
         super().__init__()
         self._predictor = SAM2ImagePredictor(model)

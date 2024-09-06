@@ -24,23 +24,27 @@ import numpy as np
 from autolabel.source.source_factory import SourceFactory
 from autolabel.model.model_factory import ModelFactory
 from autolabel.prompt.prompt import Prompt
-from autolabel.task.image_label_task import ImageLabelTask
-
+from autolabel.task.image_segment_task import ImageSegmentTask
+from autolabel.task.image_detection_task import ImageDetectionTask
 
 class TaskType(Enum):
-    IMAGE_LABEL = "image_label"
-    VIDEO_LABEL = "video_label"
+    IMAGE_SEGMENT = "image_segment"
+    IMAGE_DETECTION = "image_detection"
+    VIDEO_SEGMENT_TRACKING = "video_segment_tracking"
 
 
 def dispatch_task(task_type, model, source, prompt):
-    if TaskType(task_type) == TaskType.IMAGE_LABEL:
-        task = ImageLabelTask(model)
+    if TaskType(task_type) == TaskType.IMAGE_SEGMENT:
+        task = ImageSegmentTask(model)
         # Todo(zero): Determine whether the source can be iterated.
         # If it is an iterable type, traverse it. If not, get the data directly.
         task.set_data(source.data)
         task.add_prompt(prompt)
         masks = task.process()
-        print(masks)
+    elif TaskType(task_type) == TaskType.IMAGE_DETECTION:
+        task = ImageDetectionTask(model)
+        task.set_data(source.data)
+        results = task.process()
 
 
 def autolabel(config_file):
@@ -52,11 +56,11 @@ def autolabel(config_file):
 
     # model
     model = data['model']['checkpoint']
-    model_cfg = data['model']['model_cfg']
+    model_cfg = data['model'].get('model_cfg', None)
     model = ModelFactory.create(model, model_cfg)
 
     # source
-    source = SourceFactory.create(data['source'])
+    source = SourceFactory.create(data.get('source'))
 
     # prompt
     prompt_data = data.get('prompt', {})

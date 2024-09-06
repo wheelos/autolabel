@@ -21,7 +21,7 @@ from autolabel.task.task import Task
 from sam2.sam2_image_predictor import SAM2VideoPredictor
 
 
-class VideoLabelTask(Task):
+class VideoSegmentTrackingTask(Task):
     def __init__(self) -> None:
         super().__init__()
         self.predictor = SAM2VideoPredictor.from_pretrained(

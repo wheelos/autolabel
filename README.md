@@ -35,6 +35,10 @@ You can easily automatically label images using the following command.
 autolabel -c=autolabel/conf.yaml
 ```
 
+After the execution is completed, the marked results will be displayed. **Press any key to exit!**
+
+<img src="docs/_static/point_prompt.png" alt="point_prompt" width="500"/>
+
 ## Parameters
 
 ## Questiones

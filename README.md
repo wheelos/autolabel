@@ -13,24 +13,27 @@
 
 ## Quick start
 Install "autolabel" by the following command.
-```sh
+```shell
 # install sam2
 pip3 install 'git+https://github.com/facebookresearch/segment-anything-2.git'
 
 # install autolabel
+git clone https://github.com/wheelos/autolabel.git
+
 cd autolabel & pip3 install -e .
-# pip3 install whl-autolabel
 ```
 
 download pretrained model
-```
-cd autolabel/checkpoints/ & bash download_ckpts.sh
+```shell
+cd autolabel/checkpoints/ && \
+bash download_ckpts.sh && \
+cd -
 ```
 
 ## Command
 You can easily automatically label images using the following command.
 
-```
+```shell
 autolabel -c=autolabel/conf.yaml
 ```
 
@@ -40,6 +43,6 @@ autolabel -c=autolabel/conf.yaml
 
 1. ImportError: libGL.so.1: cannot open shared object file: No such file or directory
 
-```
-pip install opencv-python-headless
+```shell
+pip3 install opencv-python-headless
 ```

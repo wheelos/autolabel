@@ -35,9 +35,12 @@ class TaskType(Enum):
 def dispatch_task(task_type, model, source, prompt):
     if TaskType(task_type) == TaskType.IMAGE_LABEL:
         task = ImageLabelTask(model)
-        task.set_data(source)
+        # Todo(zero): Determine whether the source can be iterated.
+        # If it is an iterable type, traverse it. If not, get the data directly.
+        task.set_data(source.data)
         task.add_prompt(prompt)
         masks = task.process()
+        print(masks)
 
 
 def autolabel(config_file):
@@ -56,12 +59,12 @@ def autolabel(config_file):
     source = SourceFactory.create(data['source'])
 
     # prompt
-    prompt_data = data['prompt']
+    prompt_data = data.get('prompt', {})
     prompt = Prompt(
-        np.array(prompt_data['point_coords']),
-        np.array(prompt_data['point_labels']),
-        np.array(prompt_data['box']),
-        np.array(prompt_data['mask_input'])
+        prompt_data.get('point_coords', None),
+        prompt_data.get('point_labels', None),
+        prompt_data.get('box', None),
+        prompt_data.get('mask_input', None)
     )
 
     dispatch_task(task_type, model, source, prompt)

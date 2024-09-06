@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import torch
-from autolabel.task.task import Task
-
+import numpy as np
 from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+from autolabel.task.task import Task
 
 
 class ImageLabelTask(Task):
@@ -38,14 +40,22 @@ class ImageLabelTask(Task):
             print(f"Prompt '{prompt}' does not exist!")
 
     def _combine_prompts(self):
-        point_coords, point_labels = [], []
+        point_coords = []
+        point_labels = []
 
         for prompt in self._prompts:
-            point_coords += prompt.point_coords
-            point_labels += prompt.point_labels
+            if prompt.point_coords:
+                point_coords.extend(prompt.point_coords)
+            if prompt.point_labels:
+                point_labels.extend(prompt.point_labels)
 
-        box = self._prompts[0].box
-        mask_input = self._prompts[0].mask_input
+        point_coords = np.array(point_coords) if point_coords else None
+        point_labels = np.array(point_labels) if point_labels else None
+
+        first_prompt = self._prompts[0]
+        box = np.array(first_prompt.box) if first_prompt.box else None
+        mask_input = np.array(
+            first_prompt.mask_input) if first_prompt.mask_input else None
 
         return point_coords, point_labels, box, mask_input
 
@@ -53,6 +63,10 @@ class ImageLabelTask(Task):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             self._predictor.set_image(self._data)
             point_coords, point_labels, box, mask_input = self._combine_prompts()
+            print(f'point_coords: {point_coords}')
+            print(f'point_labels: {point_labels}')
+            print(f'box: {box}')
+            print(f'mask_input: {mask_input}')
             masks, scores, logits = self._predictor.predict(
                 point_coords=point_coords,
                 point_labels=point_labels,

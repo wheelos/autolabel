@@ -2,14 +2,9 @@ task_type: image_label
 model:
   checkpoint: autolabel/checkpoints/sam2_hiera_large.pt
   model_cfg: sam2_hiera_l.yaml
-source: autolabel/images/cars.jpg
+source: autolabel/images/truck.jpg
 prompt:
   point_coords:
-    - [10, 20]
-    - [30, 40]
+    - [500, 375]
+    - [1125, 625]
   point_labels: [1, 0]
-  box: [50, 60, 70, 80]
-  mask_input:
-    - [0, 1, 0]
-    - [1, 1, 1]
-    - [0, 0, 0]

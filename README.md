@@ -25,9 +25,7 @@ cd autolabel & pip3 install -e .
 
 download pretrained model
 ```shell
-cd autolabel/checkpoints/ && \
-bash download_ckpts.sh && \
-cd -
+wget -P autolabel/checkpoints/ https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_large.pt
 ```
 
 ## Command

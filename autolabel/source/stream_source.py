@@ -90,7 +90,7 @@ class VideoSource(StreamSource):
             raise ValueError("End of video stream")
         return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    def slice(self, duration: float) -> List[Image.Image]:
+    def slice(self, duration: float, save_img: bool) -> List[Image.Image]:
         images = []
         start_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)
         # Convert duration to milliseconds
@@ -98,9 +98,14 @@ class VideoSource(StreamSource):
 
         while self.cap.get(cv2.CAP_PROP_POS_MSEC) < end_time:
             try:
-                images.append(self.capture())
+                img = self.capture()
+                images.append(img)
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES,
                              self.cap.get(cv2.CAP_PROP_POS_FRAMES) + self.interval)
+
+                if save_img:
+                    cur_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+                    cv2.imwrite(f'/tmp/autolabel/{cur_time}.jpg', img)
             except StopIteration:
                 break
 

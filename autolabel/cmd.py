@@ -45,6 +45,11 @@ def dispatch_task(task_type, model, source, prompt):
         task = ImageDetectionTask(model)
         task.set_data(source.data)
         results = task.process()
+    elif TaskType(task_type) == TaskType.VIDEO_SEGMENT_TRACKING:
+        task = VideoSegmentTrackingTask(model)
+        source.slice(1)
+        task.set_data('/tmp/autolabel/')
+        results = task.process()
 
 
 def autolabel(config_file):

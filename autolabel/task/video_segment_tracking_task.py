@@ -22,28 +22,59 @@ from sam2.sam2_image_predictor import SAM2VideoPredictor
 
 
 class VideoSegmentTrackingTask(Task):
-    def __init__(self) -> None:
+    def __init__(self, model) -> None:
         super().__init__()
-        self.predictor = SAM2VideoPredictor.from_pretrained(
-            "facebook/sam2-hiera-large")
+        self._predictor = model
 
     def set_data(self, data):
-        pass
+        self._data = data
 
     def add_prompt(self, prompt):
-        pass
+        self._prompts.append(prompt)
 
     def del_prompt(self, prompt):
-        pass
+        if prompt in self._prompts:
+            self._prompts.remove(prompt)
+        else:
+            print(f"Prompt '{prompt}' does not exist!")
+
+    def _combine_prompts(self):
+        point_coords = []
+        point_labels = []
+
+        for prompt in self._prompts:
+            if prompt.point_coords:
+                point_coords.extend(prompt.point_coords)
+            if prompt.point_labels:
+                point_labels.extend(prompt.point_labels)
+
+        point_coords = np.array(point_coords) if point_coords else None
+        point_labels = np.array(point_labels) if point_labels else None
+
+        first_prompt = self._prompts[0]
+        box = np.array(first_prompt.box) if first_prompt.box else None
+
+        return point_coords, point_labels, box
 
     def process(self):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-            state = self.predictor.init_state( < your_video > )
+            inference_state = self._predictor.init_state(video_path=self._data)
 
             # add new prompts and instantly get the output on the same frame
-            frame_idx, object_ids, masks = self.predictor.add_new_points_or_box(
-                state, points=prompt.point_coords, labels=prompt.point_labels, box=prompt.box)
+            frame_idx, object_ids, masks = self._predictor.add_new_points_or_box(
+                inference_state=inference_state,
+                frame_idx=ann_frame_idx,
+                obj_id=ann_obj_id,
+                points=prompt.point_coords,
+                labels=prompt.point_labels,
+                box=prompt.box)
 
             # propagate the prompts to get masklets throughout the video
-            for frame_idx, object_ids, masks in self.predictor.propagate_in_video(state):
-                pass
+            video_segments = {}
+            for out_frame_idx, out_obj_ids, out_mask_logits in self._predictor.propagate_in_video(inference_state):
+                video_segments[out_frame_idx] = {
+                    out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                    for i, out_obj_id in enumerate(out_obj_ids)
+                }
+
+            return video_segments

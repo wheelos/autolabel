@@ -47,10 +47,13 @@ def _get_device():
 
 class ModelFactory:
     @staticmethod
-    def create(model: str, model_cfg: str):
+    def create(model: str, model_cfg: str, task_type: str):
         device = _get_device()
         if 'sam2' in model.lower():
-            return build_sam2(model_cfg, model, device=device)
+            if task_type == "image_segment":
+                return build_sam2(model_cfg, model, device=device)
+            elif task_type == "video_segment":
+                return build_sam2_video_predictor(model_cfg, model, device=device)
         elif 'yolo' in model.lower():
             return YOLO(model)
         else:

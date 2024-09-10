@@ -83,14 +83,19 @@ def is_video(src: str) -> bool:
     """
     Check if the given path is a video file.
     """
-    image_mime_types = {
-        "image/jpeg", "image/png", "image/gif", "image/bmp",
-        "image/webp", "image/svg+xml", "image/x-icon", "image/tiff"
+    video_mime_types = {
+        "video/x-msvideo",  # for avi files
+        "video/mp4",        # for mp4 files
+        "video/x-matroska",  # for mkv files
+        "video/quicktime",  # for mov files
+        "video/webm",       # for webm files
+        "video/x-flv",      # for flv files
+        "video/mpeg",       # for mpeg files
     }
 
     file_path = Path(src)
     mime_type, _ = mimetypes.guess_type(file_path)
-    return mime_type in image_mime_types
+    return mime_type in video_mime_types
 
 
 def is_image(src: str) -> bool:

@@ -15,8 +15,8 @@
 # limitations under the License.
 
 import torch
-from ultralytics import YOLO
-from sam2.build_sam import build_sam2
+#from ultralytics import YOLO
+from sam2.build_sam import build_sam2, build_sam2_video_predictor
 
 
 def _get_device():

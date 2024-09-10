@@ -15,10 +15,13 @@
 # limitations under the License.
 
 import torch
+import numpy as np
 
 from autolabel.task.task import Task
+from autolabel.vis.vis import show_mask1
 
-from sam2.sam2_image_predictor import SAM2VideoPredictor
+import os
+import cv2
 
 
 class VideoSegmentTrackingTask(Task):
@@ -60,14 +63,18 @@ class VideoSegmentTrackingTask(Task):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             inference_state = self._predictor.init_state(video_path=self._data)
 
+            # todo(zero): Add new interactive methods to select points or
+            # rectangles to specify the data to be labeled and visualize them
+            point_coords, point_labels, box = self._combine_prompts()
+            ann_frame_idx, ann_obj_id = 0, 0
             # add new prompts and instantly get the output on the same frame
             frame_idx, object_ids, masks = self._predictor.add_new_points_or_box(
                 inference_state=inference_state,
                 frame_idx=ann_frame_idx,
                 obj_id=ann_obj_id,
-                points=prompt.point_coords,
-                labels=prompt.point_labels,
-                box=prompt.box)
+                points=point_coords,
+                labels=point_labels,
+                box=box)
 
             # propagate the prompts to get masklets throughout the video
             video_segments = {}
@@ -76,5 +83,23 @@ class VideoSegmentTrackingTask(Task):
                     out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
                     for i, out_obj_id in enumerate(out_obj_ids)
                 }
+
+            # todo(zero): Optimize visualization methods, especially the order of images
+            # scan all the JPEG frame names in this directory.
+            # Design a way to achieve a one-to-one correspondence between images
+            # and annotation results. This may require modifying the arrangement of images in sam2.
+            frame_names = [
+                p
+                for p in os.listdir(self._data)
+                if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
+            ]
+            frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
+            num_frames = len(frame_names)
+
+            for out_frame_idx in range(num_frames):
+                image_bgr = cv2.imread(os.path.join(
+                    self._data, frame_names[out_frame_idx]), cv2.IMREAD_UNCHANGED)
+                for out_obj_id, out_mask in video_segments[out_frame_idx].items():
+                    show_mask1(image_bgr, out_mask, obj_id=out_obj_id)
 
             return video_segments

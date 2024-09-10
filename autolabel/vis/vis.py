@@ -21,6 +21,42 @@ import numpy as np
 np.random.seed(3)
 
 
+def show_mask1(image, mask, obj_id=None, random_color=False):
+    if random_color:
+        color = np.random.random(3) * 255
+    else:
+        color_map = np.array([
+            [31, 119, 180],
+            [255, 127, 14],
+            [44, 160, 44],
+            [214, 39, 40],
+            [148, 103, 189],
+            [140, 86, 75],
+            [227, 119, 194],
+            [127, 127, 127],
+            [188, 189, 34],
+            [23, 190, 207]
+        ])  # matplotlib tab10
+        cmap_idx = 0 if obj_id is None else obj_id % len(color_map)
+        color = color_map[cmap_idx]
+
+    mask = mask.astype(np.uint8)
+    h, w = mask.shape[-2:]
+    # Reshape the mask and apply color
+    mask_image = mask.reshape(h, w, 1) * color[:3].reshape(1, 1, 3)
+
+    # Convert mask_image to uint8 for blending
+    mask_image = (mask_image * 255).astype(np.uint8)
+
+    # Blend the original image and the colored mask
+    overlay_image = cv2.addWeighted(image, 0.6, mask_image, 1, 0)
+
+    # Display the image
+    cv2.imshow('Mask Image', overlay_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
 def show_mask(image, mask, random_color=False, borders=True):
     # Generate color
     if random_color:

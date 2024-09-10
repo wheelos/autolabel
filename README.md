@@ -32,7 +32,7 @@ wget -P autolabel/checkpoints/ https://dl.fbaipublicfiles.com/segment_anything_2
 You can easily automatically label images using the following command.
 
 ```shell
-autolabel -c=autolabel/conf.yaml
+autolabel -c=autolabel/config/image_segment.yaml
 ```
 
 After the execution is completed, the marked results will be displayed. **Press any key to exit!**

@@ -23,7 +23,7 @@ from typing import Iterator, List
 
 
 class StreamSource(metaclass=abc.ABCMeta):
-    def __init__(self, source_input: str, interval: int):
+    def __init__(self, source_input: str, interval: int = 1):
         if interval <= 0:
             raise ValueError("Interval must be positive")
         self._interval = interval
@@ -53,7 +53,7 @@ class StreamSource(metaclass=abc.ABCMeta):
 
 
 class ScreenshotSource(StreamSource):
-    def __init__(self, interval: int):
+    def __init__(self, interval: int = 1):
         super().__init__(interval)
 
     def capture(self) -> Image.Image:
@@ -76,7 +76,7 @@ class ScreenshotSource(StreamSource):
 
 
 class VideoSource(StreamSource):
-    def __init__(self, source_input: str, interval: int):
+    def __init__(self, source_input: str, interval: int = 1):
         super().__init__(source_input, interval)
         video_path = self.source_input.input
         self.cap = cv2.VideoCapture(video_path)
@@ -90,7 +90,7 @@ class VideoSource(StreamSource):
             raise ValueError("End of video stream")
         return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-    def slice(self, duration: float) -> List[Image.Image]:
+    def slice(self, duration: float, save_img: bool) -> List[Image.Image]:
         images = []
         start_time = self.cap.get(cv2.CAP_PROP_POS_MSEC)
         # Convert duration to milliseconds
@@ -98,9 +98,14 @@ class VideoSource(StreamSource):
 
         while self.cap.get(cv2.CAP_PROP_POS_MSEC) < end_time:
             try:
-                images.append(self.capture())
+                img = self.capture()
+                images.append(img)
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES,
                              self.cap.get(cv2.CAP_PROP_POS_FRAMES) + self.interval)
+                # todo(zero): save img to which path? use a config?
+                if save_img:
+                    cur_time = int(self.cap.get(cv2.CAP_PROP_POS_MSEC))
+                    img.save(f'/tmp/autolabel/{cur_time}.jpg')
             except StopIteration:
                 break
 
@@ -124,7 +129,7 @@ class VideoSource(StreamSource):
 
 
 class VideoStreamSource(StreamSource):
-    def __init__(self, source_input: str, interval: int):
+    def __init__(self, source_input: str, interval: int = 1):
         super().__init__(source_input, interval)
         video_url = self.source_input.input
         self.cap = cv2.VideoCapture(video_url)

@@ -6,17 +6,64 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QFileDialog, QAction, QVBoxLayout,
     QHBoxLayout, QWidget, QSizePolicy, QToolBar, QMessageBox, QStyle, QActionGroup
 )
-from PyQt5.QtGui import QPixmap, QFont, QPainter, QPen
-from PyQt5.QtCore import Qt, QUrl, QPoint, QRect, QThread, pyqtSignal
+from PyQt5.QtGui import QPixmap, QFont, QPainter, QPen, QColor, QImage
+from PyQt5.QtCore import Qt, QUrl, QPoint, QRect, QThread, pyqtSignal, QTimer
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 
+import numpy as np
+import torch
+from PIL import Image
 
+# 导入您的模型和相关模块
+from autolabel.source.source_factory import SourceFactory
+from autolabel.model.model_factory import ModelFactory
+from autolabel.prompt.prompt import Prompt
+from autolabel.task.image_segment_task import ImageSegmentTask
+from autolabel.task.image_detection_task import ImageDetectionTask
+from autolabel.task.video_segment_tracking_task import VideoSegmentTrackingTask
+
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+# 后台线程，用于模型预测
+class PredictThread(QThread):
+    result_ready = pyqtSignal(np.ndarray)
+
+    def __init__(self, image_predictor, point_coords=None, point_labels=None, box=None):
+        super().__init__()
+        self.image_predictor = image_predictor
+        self.point_coords = point_coords
+        self.point_labels = point_labels
+        self.box = box
+
+    def run(self):
+        try:
+            # 进行模型预测
+            with torch.no_grad():
+                masks, scores, logits = self.image_predictor.predict(
+                    point_coords=self.point_coords,
+                    point_labels=self.point_labels,
+                    box=self.box,
+                    multimask_output=False
+                )
+                if masks is not None and len(masks) > 0:
+                    mask = masks[0]
+                    # 将 mask 转换为 uint8 格式
+                    mask = (mask * 255).astype(np.uint8)
+                    # 发射信号，将结果传递回主线程
+                    self.result_ready.emit(mask)
+                else:
+                    self.result_ready.emit(None)
+        except Exception as e:
+            print(f"预测时发生错误：{e}")
+            self.result_ready.emit(None)
 class ImageLabel(QLabel):
+    update_mask_signal = pyqtSignal(np.ndarray)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
-        self.setScaledContents(True)  # 允许自动缩放图像
+        self.setScaledContents(False)
 
         self.coord_label = QLabel(self)
         self.coord_label.setStyleSheet(
@@ -26,33 +73,97 @@ class ImageLabel(QLabel):
         self.coord_label.hide()
         self.coord_label.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-        # 设置尺寸策略
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.coord_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        # 绘图相关属性
         self.drawing = False
         self.start_point = QPoint()
         self.end_point = QPoint()
         self.rectangles = []
-        self.points = []  # 存储 (point, point_type)
-        self.current_tool = None  # 'rectangle' or 'point'
-        self.point_type = None  # 'target' or 'non-target'
+        self.points = []
+        self.current_tool = None
+        self.point_type = None
 
-        # 操作栈，用于撤销操作
         self.actions = []
+        self.predictor = None
+        self.mask = None
+        self.combined_mask = None
+        self.is_previewing = True  # 控制是否实时预览
+        self.clicked_points = []
+
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setInterval(500)
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self.perform_prediction)
+
+        self.update_mask_signal.connect(self.on_update_mask)
+
+    def get_pixmap_rect(self):
+        pixmap = self.pixmap()
+        if not pixmap:
+            return QRect()
+
+        label_width = self.width()
+        label_height = self.height()
+        pixmap_width = pixmap.width()
+        pixmap_height = pixmap.height()
+
+        if pixmap_width <= 0 or pixmap_height <= 0:
+            return QRect()
+
+        ratio = min(label_width / pixmap_width, label_height / pixmap_height)
+        new_width = pixmap_width * ratio
+        new_height = pixmap_height * ratio
+
+        x_offset = (label_width - new_width) / 2
+        y_offset = (label_height - new_height) / 2
+
+        return QRect(int(x_offset), int(y_offset), int(new_width), int(new_height))
 
     def mousePressEvent(self, event):
-        if self.current_tool == 'rectangle' and event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and self.current_tool == 'point' and self.point_type:
+            # 选择点，停止实时预览并生成分割结果
+            self.is_previewing = False
+
+            x, y = self.current_mouse_pos
+            self.clicked_points.append((x, y))
+
+            # 更新模型预测结果
+            self.run_model_with_clicked_points()
+
+        elif self.current_tool == 'rectangle' and event.button() == Qt.LeftButton:
+            # 选择矩形，准备绘制
             self.drawing = True
             self.start_point = event.pos()
             self.end_point = event.pos()
-        elif self.current_tool == 'point' and self.point_type and event.button() == Qt.LeftButton:
-            self.points.append((event.pos(), self.point_type))
-            # 记录操作
-            self.actions.append(('point', (event.pos(), self.point_type)))
-            self.update()
+
         super().mousePressEvent(event)
+
+    def run_model_with_clicked_points(self):
+        if self.predictor is None or not self.clicked_points:
+            return
+
+        point_coords = np.array(self.clicked_points, dtype=np.float32)
+        point_labels = np.ones(len(self.clicked_points), dtype=np.int32)
+
+        self.predict_thread = PredictThread(self.predictor, point_coords=point_coords, point_labels=point_labels)
+        self.predict_thread.result_ready.connect(self.update_combined_mask)
+        self.predict_thread.start()
+
+    def update_combined_mask(self, mask):
+        if mask is None:
+            QMessageBox.critical(self, "错误", "分割过程中出现错误！")
+            return
+
+        # 将新的分割结果与之前的结果叠加，确保分割结果不会丢失
+        if self.combined_mask is None:
+            self.combined_mask = mask
+        else:
+            self.combined_mask = np.maximum(self.combined_mask, mask)
+
+        # 停止预览并更新显示
+        self.is_previewing = False
+        self.update()
 
     def mouseMoveEvent(self, event):
         pos = event.pos()
@@ -61,82 +172,129 @@ class ImageLabel(QLabel):
             self.update()
 
         if self.pixmap():
-            pixmap = self.pixmap()
-            label_size = self.size()
-            pixmap_size = pixmap.size()
+            pixmap_rect = self.get_pixmap_rect()
 
-            if pixmap_size.width() == 0 or pixmap_size.height() == 0:
-                super().mouseMoveEvent(event)
-                return
+            if pixmap_rect.contains(pos):
+                x = (pos.x() - pixmap_rect.x()) * self.pixmap().width() / pixmap_rect.width()
+                y = (pos.y() - pixmap_rect.y()) * self.pixmap().height() / pixmap_rect.height()
+                x = int(x)
+                y = int(y)
 
-            # 计算缩放比例
-            x_ratio = pixmap_size.width() / label_size.width()
-            y_ratio = pixmap_size.height() / label_size.height()
+                if 0 <= x < self.pixmap().width() and 0 <= y < self.pixmap().height():
+                    self.coord_label.setText(f"坐标: ({x}, {y})")
+                    label_x = pos.x()
+                    label_y = pos.y()
+                    if label_x + self.coord_label.width() > self.width():
+                        label_x = self.width() - self.coord_label.width()
+                    if label_y + self.coord_label.height() > self.height():
+                        label_y = self.height() - self.coord_label.height()
+                    self.coord_label.move(label_x, label_y)
+                    self.coord_label.adjustSize()
+                    self.coord_label.show()
+                else:
+                    self.coord_label.hide()
 
-            # 获取实际坐标
-            x = int(pos.x() * x_ratio)
-            y = int(pos.y() * y_ratio)
-
-            # 确保坐标在图像范围内
-            if 0 <= x < pixmap_size.width() and 0 <= y < pixmap_size.height():
-                self.coord_label.setText(f"坐标: ({x}, {y})")
-                # 防止坐标标签超出图像边界
-                label_x = pos.x()
-                label_y = pos.y()
-                label_width = self.coord_label.width()
-                label_height = self.coord_label.height()
-                if label_x + label_width > label_size.width():
-                    label_x = label_size.width() - label_width
-                if label_y + label_height > label_size.height():
-                    label_y = label_size.height() - label_height
-                self.coord_label.move(label_x, label_y)
-                self.coord_label.adjustSize()
-                self.coord_label.show()
+                self.current_mouse_pos = (x, y)
+                # 只有在预览状态下才允许实时分割
+                if self.is_previewing:
+                    self.debounce_timer.start()
             else:
                 self.coord_label.hide()
         super().mouseMoveEvent(event)
 
+    def perform_prediction(self):
+        if self.predictor is None or not self.is_previewing:
+            return
+
+        point_coords = self.current_mouse_pos
+
+        self.predict_thread = PredictThread(self.predictor, point_coords=np.array([point_coords], dtype=np.float32), point_labels=np.array([1], dtype=np.int32))
+        self.predict_thread.result_ready.connect(self.on_update_mask)
+        self.predict_thread.start()
+
+    def on_update_mask(self, mask):
+        if mask is not None:
+            self.mask = mask
+            self.update()
+        else:
+            QMessageBox.critical(self, "错误", "分割过程中出现错误！")
+
     def mouseReleaseEvent(self, event):
         if self.drawing and self.current_tool == 'rectangle':
             self.end_point = event.pos()
-            self.rectangles.append((self.start_point, self.end_point))
-            # 记录操作
-            self.actions.append(('rectangle', (self.start_point, self.end_point)))
+            pixmap_rect = self.get_pixmap_rect()
+            start_x = (self.start_point.x() - pixmap_rect.x()) * self.pixmap().width() / pixmap_rect.width()
+            start_y = (self.start_point.y() - pixmap_rect.y()) * self.pixmap().height() / pixmap_rect.height()
+            end_x = (self.end_point.x() - pixmap_rect.x()) * self.pixmap().width() / pixmap_rect.width()
+            end_y = (self.end_point.y() - pixmap_rect.y()) * self.pixmap().height() / pixmap_rect.height()
+            start_point = QPoint(int(start_x), int(start_y))
+            end_point = QPoint(int(end_x), int(end_y))
+            self.rectangles.append((start_point, end_point))
+            self.actions.append(('rectangle', (start_point, end_point)))
             self.drawing = False
             self.update()
+
+            box = [start_x, start_y, end_x, end_y]
+            # 执行分割后，停止实时预览
+            self.run_model_with_box(box)
+
         super().mouseReleaseEvent(event)
+
+    def run_model_with_box(self, box):
+        if self.predictor is None or not box:
+            return
+
+        # 停止预览，执行分割
+        self.is_previewing = False
+
+        self.predict_thread = PredictThread(self.predictor, box=box)
+        self.predict_thread.result_ready.connect(self.update_combined_mask)
+        self.predict_thread.start()
 
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # 绘制已保存的矩形
+        pixmap_rect = self.get_pixmap_rect()
+
+        if self.combined_mask is not None:
+            combined_mask_image = QImage(self.combined_mask.data, self.combined_mask.shape[1], self.combined_mask.shape[0], self.combined_mask.shape[1], QImage.Format_Grayscale8)
+            combined_mask_image = combined_mask_image.scaled(pixmap_rect.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            painter.setOpacity(0.5)
+            painter.drawImage(pixmap_rect.topLeft(), combined_mask_image)
+            painter.setOpacity(1.0)
+
+        if self.is_previewing and self.mask is not None:
+            mask_image = QImage(self.mask.data, self.mask.shape[1], self.mask.shape[0], self.mask.shape[1], QImage.Format_Grayscale8)
+            mask_image = mask_image.scaled(pixmap_rect.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            painter.setOpacity(0.5)
+            painter.drawImage(pixmap_rect.topLeft(), mask_image)
+            painter.setOpacity(1.0)
+
         pen = QPen(Qt.green, 2, Qt.SolidLine)
         painter.setPen(pen)
         for rect in self.rectangles:
-            rect_normalized = QRect(rect[0], rect[1]).normalized()
+            start_x = pixmap_rect.x() + rect[0].x() * pixmap_rect.width() / self.pixmap().width()
+            start_y = pixmap_rect.y() + rect[0].y() * pixmap_rect.height() / self.pixmap().height()
+            end_x = pixmap_rect.x() + rect[1].x() * pixmap_rect.width() / self.pixmap().width()
+            end_y = pixmap_rect.y() + rect[1].y() * pixmap_rect.height() / self.pixmap().height()
+            start_point = QPoint(int(start_x), int(start_y))
+            end_point = QPoint(int(end_x), int(end_y))
+            rect_normalized = QRect(start_point, end_point).normalized()
             painter.drawRect(rect_normalized)
 
-        # 绘制正在绘制的矩形
         if self.drawing and self.current_tool == 'rectangle':
             pen = QPen(Qt.red, 2, Qt.DashLine)
             painter.setPen(pen)
-            rect = QRect(self.start_point, self.end_point).normalized()
-            painter.drawRect(rect)
+            painter.drawRect(QRect(self.start_point, self.end_point).normalized())
 
-        # 绘制选取的点
         for point, point_type in self.points:
-            if point_type == 'target':
-                pen = QPen(Qt.green, 5)
-            else:
-                pen = QPen(Qt.red, 5)
+            pen = QPen(Qt.green if point_type == 'target' else Qt.red, 5)
             painter.setPen(pen)
-            painter.drawPoint(point)
-
-    def leaveEvent(self, event):
-        self.coord_label.hide()
-        super().leaveEvent(event)
+            x = pixmap_rect.x() + point.x() * pixmap_rect.width() / self.pixmap().width()
+            y = pixmap_rect.y() + point.y() * pixmap_rect.height() / self.pixmap().height()
+            painter.drawPoint(int(x), int(y))
 
     def undo_last_action(self):
         if self.actions:
@@ -153,119 +311,41 @@ class ImageLabel(QLabel):
         self.rectangles.clear()
         self.points.clear()
         self.actions.clear()
+        self.mask = None
+        self.combined_mask = None
+        self.clicked_points = []
+        self.is_previewing = True  # 清除所有操作后重新启用预览
         self.update()
 
     def save_image(self):
         if self.pixmap():
-            # 创建一个与原始图像相同大小的 QPixmap
-            pixmap = self.pixmap().copy()
+            pixmap = QPixmap(self.pixmap())
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.Antialiasing)
 
-            # 计算缩放比例
-            label_size = self.size()
-            pixmap_size = pixmap.size()
-            x_ratio = pixmap_size.width() / label_size.width()
-            y_ratio = pixmap_size.height() / label_size.height()
-
-            # 绘制矩形
-            pen = QPen(Qt.green, 2)
-            painter.setPen(pen)
-            for rect in self.rectangles:
-                start = QPoint(int(rect[0].x() * x_ratio), int(rect[0].y() * y_ratio))
-                end = QPoint(int(rect[1].x() * x_ratio), int(rect[1].y() * y_ratio))
-                rect_normalized = QRect(start, end).normalized()
-                painter.drawRect(rect_normalized)
-
-            # 绘制点
-            for point, point_type in self.points:
-                p = QPoint(int(point.x() * x_ratio), int(point.y() * y_ratio))
-                if point_type == 'target':
-                    pen = QPen(Qt.green, 5)
-                else:
-                    pen = QPen(Qt.red, 5)
-                painter.setPen(pen)
-                painter.drawPoint(p)
+            if self.combined_mask is not None:
+                mask_image = QImage(self.combined_mask.data, self.combined_mask.shape[1], self.combined_mask.shape[0], self.combined_mask.shape[1], QImage.Format_Grayscale8)
+                painter.setOpacity(0.5)
+                painter.drawImage(0, 0, mask_image)
+                painter.setOpacity(1.0)
 
             painter.end()
 
-            # 保存图像
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "保存图像", "", "PNG Files (*.png);;JPEG Files (*.jpg *.jpeg);;BMP Files (*.bmp)"
-            )
+            file_path, _ = QFileDialog.getSaveFileName(self, "保存图像", "", "PNG Files (*.png);;JPEG Files (*.jpg *.jpeg);;BMP Files (*.bmp)")
             if file_path:
                 pixmap.save(file_path)
         else:
             QMessageBox.warning(self, "警告", "没有可保存的图像！")
 
 
-class VideoWidget(QVideoWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMouseTracking(True)
-        self.coord_label = QLabel(self)
-        self.coord_label.setStyleSheet(
-            "color: red; background-color: rgba(255, 255, 255, 128);"
-        )
-        self.coord_label.setFont(QFont("Arial", 12))
-        self.coord_label.hide()
-        self.coord_label.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-        # 设置尺寸策略
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.coord_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-    def mouseMoveEvent(self, event):
-        pos = event.pos()
-        if 0 <= pos.x() < self.width() and 0 <= pos.y() < self.height():
-            self.coord_label.setText(f"坐标: ({pos.x()}, {pos.y()})")
-            # 防止坐标标签超出视频边界
-            label_x = pos.x()
-            label_y = pos.y()
-            label_width = self.coord_label.width()
-            label_height = self.coord_label.height()
-            if label_x + label_width > self.width():
-                label_x = self.width() - label_width
-            if label_y + label_height > self.height():
-                label_y = self.height() - label_height
-            self.coord_label.move(label_x, label_y)
-            self.coord_label.adjustSize()
-            self.coord_label.show()
-        else:
-            self.coord_label.hide()
-        super().mouseMoveEvent(event)
-
-    def leaveEvent(self, event):
-        self.coord_label.hide()
-        super().leaveEvent(event)
-
-
-class CommandThread(QThread):
-    finished = pyqtSignal(bool, str)
-
-    def __init__(self, command, parent=None):
-        super().__init__(parent)
-        self.command = command
-
-    def run(self):
-        try:
-            result = subprocess.run(self.command, capture_output=True, text=True, shell=True)
-            if result.returncode == 0:
-                output = result.stdout
-                self.finished.emit(True, output)
-            else:
-                error_output = result.stderr
-                self.finished.emit(False, error_output)
-        except Exception as e:
-            self.finished.emit(False, str(e))
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("AutoLabel")
-        self.resize(800, 600)
+        self.setWindowTitle("上位机程序")
+        self.resize(1200, 800)
 
         # 创建一个中央小部件
         self.central_widget = QWidget()
@@ -282,24 +362,18 @@ class MainWindow(QMainWindow):
         self.tool_bar.setMovable(False)
 
         # 添加工具按钮
-
-        # 矩形工具
         self.rect_tool_action = QAction("矩形工具", self)
         self.rect_tool_action.setCheckable(True)
         self.rect_tool_action.triggered.connect(self.select_rectangle_tool)
         self.tool_bar.addAction(self.rect_tool_action)
 
-        # 点工具
         self.point_tool_action = QAction("点工具", self)
         self.point_tool_action.setCheckable(True)
         self.point_tool_action.triggered.connect(self.select_point_tool)
         self.tool_bar.addAction(self.point_tool_action)
 
         # 工具组，用于互斥选择
-        self.tool_actions = [
-            self.rect_tool_action,
-            self.point_tool_action
-        ]
+        self.tool_actions = [self.rect_tool_action, self.point_tool_action]
 
         # 添加点类型动作，但初始时禁用
         self.target_point_action = QAction("目标点", self)
@@ -318,6 +392,7 @@ class MainWindow(QMainWindow):
         self.point_type_action_group.triggered.connect(self.point_type_selected)
 
         # 添加到工具栏
+        self.tool_bar.addSeparator()
         self.tool_bar.addAction(self.target_point_action)
         self.tool_bar.addAction(self.non_target_point_action)
 
@@ -370,21 +445,25 @@ class MainWindow(QMainWindow):
         self.save_action.triggered.connect(self.save_action_triggered)
         self.top_toolbar.addAction(self.save_action)
 
-        # 更换执行按钮的图标，使用标准的运行图标
+        # 使用标准执行图标
         execute_icon = self.style().standardIcon(QStyle.SP_MediaPlay)
         self.execute_action = QAction(execute_icon, "执行", self)
         self.execute_action.triggered.connect(self.execute_action_triggered)
         self.top_toolbar.addAction(self.execute_action)
 
+        # 添加清除按钮
+        clear_icon = self.style().standardIcon(QStyle.SP_DialogResetButton)
+        self.clear_action = QAction(clear_icon, "清除", self)
+        self.clear_action.triggered.connect(self.clear_action_triggered)
+        self.top_toolbar.addAction(self.clear_action)
+
     def update_tool_selection(self, selected_action):
         for action in self.tool_actions:
             action.setChecked(action == selected_action)
         if selected_action == self.point_tool_action:
-            # 启用点类型动作
             for action in self.point_type_action_group.actions():
                 action.setEnabled(True)
         else:
-            # 禁用点类型动作
             for action in self.point_type_action_group.actions():
                 action.setEnabled(False)
                 action.setChecked(False)
@@ -410,30 +489,22 @@ class MainWindow(QMainWindow):
     def save_action_triggered(self):
         self.image_label.save_image()
 
+    def clear_action_triggered(self):
+        self.image_label.clear_all()
+
     def execute_action_triggered(self):
-        # 确保有打开的文件
         if not self.current_file:
             QMessageBox.warning(self, "警告", "请先打开一个文件！")
             return
 
-        # 将点的坐标转换为实际图像坐标
         point_coords = []
         point_labels = []
-        label_size = self.image_label.size()
-        pixmap_size = self.image_label.pixmap().size()
-        x_ratio = pixmap_size.width() / label_size.width()
-        y_ratio = pixmap_size.height() / label_size.height()
-
         for point, point_type in self.image_label.points:
-            x = int(point.x() * x_ratio)
-            y = int(point.y() * y_ratio)
+            x = point.x()
+            y = point.y()
             point_coords.append([x, y])
-            if point_type == 'target':
-                point_labels.append(1)
-            else:
-                point_labels.append(0)
+            point_labels.append(1 if point_type == 'target' else 0)
 
-        # 构建配置文件内容，使用标准字典
         content = {
             'task_type': 'video_segment' if not self.is_image else 'image_segment',
             'model': {
@@ -444,34 +515,21 @@ class MainWindow(QMainWindow):
             'prompt': {
                 'point_coords': point_coords,
                 'point_labels': point_labels
-                # 如果需要添加 box，可以在这里添加
-                # 'box': [425, 600, 700, 875]
             }
         }
 
-        # 获取当前脚本所在的目录
         base_dir = os.path.dirname(os.path.abspath(__file__))
         config_dir = os.path.join(base_dir, 'autolabel', 'config')
 
-        # 如果目录不存在，则创建
         if not os.path.exists(config_dir):
             os.makedirs(config_dir)
 
-        # 文件路径
         file_path = os.path.join(config_dir, 'image_segment_gen.yaml')
 
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
-                yaml.dump(
-                    content,
-                    f,
-                    allow_unicode=True,
-                    default_flow_style=False,
-                    sort_keys=False
-                )
-            # QMessageBox.information(self, "成功", f"文件已生成：{file_path}")
+                yaml.dump(content, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
-            # 生成配置文件后，执行命令
             command = f'autolabel -c={file_path}'
             self.command_thread = CommandThread(command)
             self.command_thread.finished.connect(self.on_command_finished)
@@ -487,13 +545,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "错误", "命令执行失败！\n" + output)
 
     def get_relative_source_path(self, file_path):
-        # 假设 autolabel/images/ 目录在 base_dir 下
         base_dir = os.path.dirname(os.path.abspath(__file__))
         try:
             relative_path = os.path.relpath(file_path, base_dir)
-            return relative_path.replace("\\", "/")  # 兼容Windows路径
+            return relative_path.replace("\\", "/")
         except ValueError:
-            # 如果无法计算相对路径，返回绝对路径
             return file_path.replace("\\", "/")
 
     def open_file(self):
@@ -501,7 +557,7 @@ class MainWindow(QMainWindow):
             self, "打开文件", "", "Image/Video Files (*.png *.jpg *.bmp *.mp4 *.avi *.mov)"
         )
         if file_name:
-            if file_name.lower().endswith(('.png', '.jpg', '.bmp')):
+            if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
                 self.open_image(file_name)
             elif file_name.lower().endswith(('.mp4', '.avi', '.mov')):
                 self.open_video(file_name)
@@ -513,15 +569,25 @@ class MainWindow(QMainWindow):
     def open_image(self, file_name):
         pixmap = QPixmap(file_name)
         if pixmap.isNull():
-            # 处理无法加载的图像
             self.image_label.setText("无法加载图像")
         else:
             self.image_label.setPixmap(pixmap)
-            # 重置绘制状态
-            self.image_label.rectangles = []
-            self.image_label.points = []
-            self.image_label.actions = []  # 清空操作栈
+            self.image_label.clear_all()
             self.image_label.update()
+
+            image = Image.open(file_name)
+            image = np.array(image.convert('RGB'))
+
+            model_checkpoint = 'autolabel/checkpoints/sam2_hiera_large.pt'
+            model_cfg = 'sam2_hiera_l.yaml'
+
+            model = ModelFactory.create(model_checkpoint, model_cfg, 'image_segment')
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model.to(device)
+
+            self.image_label.predictor = SAM2ImagePredictor(model)
+            self.image_label.predictor.set_image(image)
+
         self.is_image = True
         self.media_player.stop()
         if self.video_widget.isVisible():
@@ -530,7 +596,7 @@ class MainWindow(QMainWindow):
         if not self.image_label.isVisible():
             self.main_layout.addWidget(self.image_label)
             self.image_label.show()
-        self.current_file = file_name  # 记录当前文件路径
+        self.current_file = file_name
 
     def open_video(self, file_name):
         self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(file_name)))
@@ -543,23 +609,75 @@ class MainWindow(QMainWindow):
             self.main_layout.addWidget(self.video_widget)
             self.video_widget.show()
 
-        # 禁用绘图工具
         for action in self.tool_actions:
             action.setChecked(False)
         self.image_label.current_tool = None
-        # 禁用点类型动作
+
         for action in self.point_type_action_group.actions():
             action.setEnabled(False)
             action.setChecked(False)
         self.image_label.point_type = None
-        self.current_file = file_name  # 记录当前文件路径
+        self.current_file = file_name
 
     def closeEvent(self, event):
-        # 确保在关闭应用程序时，正确释放媒体播放器资源
         self.media_player.stop()
         self.media_player.setMedia(QMediaContent())
         super().closeEvent(event)
+class VideoWidget(QVideoWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.coord_label = QLabel(self)
+        self.coord_label.setStyleSheet(
+            "color: yellow; background-color: rgba(0, 0, 0, 128);"
+        )
+        self.coord_label.setFont(QFont("Arial", 12))
+        self.coord_label.hide()
+        self.coord_label.setAttribute(Qt.WA_TransparentForMouseEvents)
 
+        # 设置尺寸策略
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.coord_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # 鼠标坐标
+        self.current_mouse_pos = (0, 0)
+
+        # 防抖定时器，避免频繁调用
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setInterval(500)  # 每500ms最多执行一次
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self.update_mouse_coords)
+
+    def mouseMoveEvent(self, event):
+        pos = event.pos()
+        self.current_mouse_pos = (pos.x(), pos.y())
+
+        # 显示鼠标坐标
+        self.coord_label.setText(f"坐标: ({pos.x()}, {pos.y()})")
+        # 防止坐标标签超出视频窗口边界
+        label_x = pos.x()
+        label_y = pos.y()
+        label_width = self.coord_label.width()
+        label_height = self.coord_label.height()
+        if label_x + label_width > self.width():
+            label_x = self.width() - label_width
+        if label_y + label_height > self.height():
+            label_y = self.height() - label_height
+        self.coord_label.move(label_x, label_y)
+        self.coord_label.adjustSize()
+        self.coord_label.show()
+
+        # 启动防抖定时器
+        self.debounce_timer.start()
+
+        super().mouseMoveEvent(event)
+
+    def update_mouse_coords(self):
+        """可以在这里添加与鼠标坐标相关的功能，例如更新状态栏等。"""
+        pass
+
+    def leaveEvent(self, event):
+        self.coord_label.hide()
+        super().leaveEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

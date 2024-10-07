@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QFileDialog, QAction, QVBoxLayout,
     QHBoxLayout, QWidget, QSizePolicy, QToolBar, QMessageBox, QStyle, QActionGroup
 )
-from PyQt5.QtGui import QPixmap, QFont, QPainter, QPen, QColor, QImage
+from PyQt5.QtGui import QPixmap, QFont, QPainter, QPen, QColor, QImage, QCursor
 from PyQt5.QtCore import Qt, QUrl, QPoint, QRect, QThread, pyqtSignal, QTimer
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
@@ -91,10 +91,13 @@ class ImageLabel(QLabel):
         self.is_previewing = True  # 控制是否实时预览
         self.clicked_points = []
 
+        # 鼠标是否正在移动
+        self.mouse_is_moving = False
+
         self.debounce_timer = QTimer()
-        self.debounce_timer.setInterval(500)
+        self.debounce_timer.setInterval(20)
         self.debounce_timer.setSingleShot(True)
-        self.debounce_timer.timeout.connect(self.perform_prediction)
+        self.debounce_timer.timeout.connect(self.on_mouse_still)
 
         self.update_mask_signal.connect(self.on_update_mask)
 
@@ -121,7 +124,7 @@ class ImageLabel(QLabel):
         return QRect(int(x_offset), int(y_offset), int(new_width), int(new_height))
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and self.current_tool == 'point' and self.point_type:
+        if event.button() == Qt.LeftButton and self.current_tool == 'point':
             # 选择点，停止实时预览并生成分割结果
             self.is_previewing = False
 
@@ -131,7 +134,7 @@ class ImageLabel(QLabel):
             # 更新模型预测结果
             self.run_model_with_clicked_points()
 
-        elif self.current_tool == 'rectangle' and event.button() == Qt.LeftButton:
+        elif event.button() == Qt.LeftButton and self.current_tool == 'rectangle':
             # 选择矩形，准备绘制
             self.drawing = True
             self.start_point = event.pos()
@@ -139,41 +142,86 @@ class ImageLabel(QLabel):
 
         super().mousePressEvent(event)
 
+
     def run_model_with_clicked_points(self):
         if self.predictor is None or not self.clicked_points:
             return
 
-        point_coords = np.array(self.clicked_points, dtype=np.float32)
-        point_labels = np.ones(len(self.clicked_points), dtype=np.int32)
+        # 只使用最后一个点击的点
+        last_point = self.clicked_points[-1]
+        point_coords = np.array([last_point], dtype=np.float32)
+        point_labels = np.array([1], dtype=np.int32)
 
         self.predict_thread = PredictThread(self.predictor, point_coords=point_coords, point_labels=point_labels)
         self.predict_thread.result_ready.connect(self.update_combined_mask)
         self.predict_thread.start()
+
+
 
     def update_combined_mask(self, mask):
         if mask is None:
             QMessageBox.critical(self, "错误", "分割过程中出现错误！")
             return
 
-        # 将新的分割结果与之前的结果叠加，确保分割结果不会丢失
         if self.combined_mask is None:
             self.combined_mask = mask
         else:
-            self.combined_mask = np.maximum(self.combined_mask, mask)
+            # 根据当前工具类型处理
+            if self.current_tool == 'point' and self.clicked_points:
+                last_coordinate = self.clicked_points[-1]
+                x, y = last_coordinate
 
-        # 停止预览并更新显示
+                if self.is_point_in_combined_mask(self.combined_mask, x, y):
+                    # 从 combined_mask 中减去新的 mask
+                    overlap_region = np.logical_and(self.combined_mask > 0, mask > 0)
+                    self.combined_mask[overlap_region] = np.maximum(0, self.combined_mask[overlap_region] - mask[overlap_region])
+                else:
+                    # 将新的 mask 加入到 combined_mask 中
+                    non_overlap_region = np.logical_and(self.combined_mask == 0, mask > 0)
+                    self.combined_mask[non_overlap_region] = mask[non_overlap_region]
+            elif self.current_tool == 'rectangle':
+                # 对于矩形工具，直接将新的 mask 加入到 combined_mask 中
+                self.combined_mask = np.maximum(self.combined_mask, mask)
+            else:
+                # 其他情况，可以根据需要添加处理逻辑
+                pass
+
+        self.combined_mask = np.clip(self.combined_mask, 0, 255)
         self.is_previewing = False
         self.update()
 
+
+
+    def is_point_in_combined_mask(self, combined_mask, x, y):
+        # 检查坐标是否在图像的范围内
+        if 0 <= x < combined_mask.shape[1] and 0 <= y < combined_mask.shape[0]:
+            # 判断该点在 combined_mask 对应位置的值是否大于零
+            return combined_mask[y, x] > 0
+        else:
+            # 如果坐标超出边界，返回 False
+            return False
+
+
+    # 鼠标正在移动
     def mouseMoveEvent(self, event):
-        pos = event.pos()
+        self.mouse_is_moving = True;
+        # 鼠标正在移动，重置定时器
+        if self.debounce_timer.isActive():
+            self.debounce_timer.stop()
+        self.debounce_timer.start();
+        super().mouseMoveEvent(event)
+    
+    # 鼠标静止 在鼠标静止的情况下，显示图片的坐标和进行预览
+    def on_mouse_still(self):
+        self.mouse_is_moving = False
+        pos = self.mapFromGlobal(QCursor.pos())  # 获取当前鼠标位置
+
         if self.drawing and self.current_tool == 'rectangle':
-            self.end_point = event.pos()
+            self.end_point = pos
             self.update()
 
         if self.pixmap():
             pixmap_rect = self.get_pixmap_rect()
-
             if pixmap_rect.contains(pos):
                 x = (pos.x() - pixmap_rect.x()) * self.pixmap().width() / pixmap_rect.width()
                 y = (pos.y() - pixmap_rect.y()) * self.pixmap().height() / pixmap_rect.height()
@@ -197,11 +245,12 @@ class ImageLabel(QLabel):
                 self.current_mouse_pos = (x, y)
                 # 只有在预览状态下才允许实时分割
                 if self.is_previewing:
-                    self.debounce_timer.start()
+                    self.perform_prediction()
             else:
                 self.coord_label.hide()
-        super().mouseMoveEvent(event)
+       
 
+    # 预览分割结果    
     def perform_prediction(self):
         if self.predictor is None or not self.is_previewing:
             return
@@ -577,16 +626,9 @@ class MainWindow(QMainWindow):
 
             image = Image.open(file_name)
             image = np.array(image.convert('RGB'))
-
-            model_checkpoint = 'autolabel/checkpoints/sam2_hiera_large.pt'
-            model_cfg = 'sam2_hiera_l.yaml'
-
-            model = ModelFactory.create(model_checkpoint, model_cfg, 'image_segment')
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            model.to(device)
-
-            self.image_label.predictor = SAM2ImagePredictor(model)
-            self.image_label.predictor.set_image(image)
+            self.thread = CreateImagePredictorThread(image)
+            self.thread.predictor_created.connect(self.get_predictor)
+            self.thread.start()
 
         self.is_image = True
         self.media_player.stop()
@@ -597,6 +639,9 @@ class MainWindow(QMainWindow):
             self.main_layout.addWidget(self.image_label)
             self.image_label.show()
         self.current_file = file_name
+
+    def get_predictor(self, predictor):
+        self.image_label.predictor = predictor
 
     def open_video(self, file_name):
         self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(file_name)))
@@ -678,6 +723,24 @@ class VideoWidget(QVideoWidget):
     def leaveEvent(self, event):
         self.coord_label.hide()
         super().leaveEvent(event)
+
+
+class CreateImagePredictorThread(QThread):
+    predictor_created = pyqtSignal(SAM2ImagePredictor)
+    def __init__(self, image):
+        super().__init__()
+        self.image = image
+    def run(self):
+        model_checkpoint = 'autolabel/checkpoints/sam2_hiera_large.pt'
+        model_cfg = 'sam2_hiera_l.yaml'
+
+        model = ModelFactory.create(model_checkpoint, model_cfg, 'image_segment')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model.to(device)
+
+        predictor = SAM2ImagePredictor(model)
+        predictor.set_image(self.image)
+        self.predictor_created.emit(predictor)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
